@@ -93,14 +93,14 @@ def min_max_data(train_data, test_data, val_data):
 
     # Get the training features' min and max
     train_min = np.min(train_data, axis = 0)
-    train_max = np.max(train_data, axis = )
+    train_max = np.max(train_data, axis = 0)
 
     mm_train_data = (train_data - train_min) / (train_max - train_min)
     mm_test_data = (test_data - train_min) / (train_max - train_min)
-    mm_train_data = (val_data - train_min) / (train_max - train_min)
+    mm_val_data = (val_data - train_min) / (train_max - train_min)
 
     return mm_train_data, mm_test_data, mm_val_data
-    
+
 def normalize_data(train_data, test_data, val_data):
 
     # Get the training mean and std

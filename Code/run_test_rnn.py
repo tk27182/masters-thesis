@@ -20,6 +20,7 @@ from sklearn.metrics import roc_curve, auc, precision_recall_curve
 print("Just imported libraries!")
 np.random.seed(0)
 
+### From RNN example of how it works
 class MinimalRNNCell(keras.layers.Layer):
 
     def __init__(self, units, **kwargs):
@@ -28,9 +29,12 @@ class MinimalRNNCell(keras.layers.Layer):
         super(MinimalRNNCell, self).__init__(**kwargs)
 
     def build(self, input_shape):
+        # Add wait is a method of keras.layers.Layer
+        # Add weights for the input matrix
         self.kernel = self.add_weight(shape=(input_shape[-1], self.units),
                                       initializer='uniform',
                                       name='kernel')
+        # Add weights for the previous state matrix
         self.recurrent_kernel = self.add_weight(
             shape=(self.units, self.units),
             initializer='uniform',
@@ -38,12 +42,14 @@ class MinimalRNNCell(keras.layers.Layer):
         self.built = True
 
     def call(self, inputs, states):
+        # This is where you can do the calculations to adjust the simple RNN cell
         prev_output = states[0]
+        # Get the curretn state
         h = keras.backend.dot(inputs, self.kernel)
+        # Add the previous state
         output = h + keras.backend.dot(prev_output, self.recurrent_kernel)
         return output, [output]
 
-print("defined clas...")
 
 '''
 cell = MinimalRNNCell(32)
@@ -61,7 +67,11 @@ print(y)
 alldata = sio.loadmat('1-sf_12hours_subsample_locf_lstm_data.mat')
 
 data = alldata['data']['data'][0][0]
+
 var_names = [v[0] for v in alldata['data']['varname'][0][0][0]]
+import pandas as pd
+temp_df = pd.DataFrame(data, columns = var_names)
+print(temp_df.isna().any())
 target = alldata['target']
 target = np.where(target == -1, 0, 1).ravel()
 
@@ -83,7 +93,7 @@ X_val = data[val_idx,:]
 y_val = target[val_idx,:]#.reshape(-1,1)
 
 # Normalize the data
-X_train_scaled, X_test_scaled, X_val_scaled = nnm.normalize_data(X_train, X_test, X_val)
+X_train_scaled, X_test_scaled, X_val_scaled = nnm.min_max_data(X_train, X_test, X_val)
 
 # Reshape data to be read by RNN models
 #train_data_stacked = np.concatenate((X_train_scaled, y_train), axis = 1) #tf.stack([X_train_scaled, y_train])
