@@ -76,8 +76,6 @@ train_labels = train_labels.astype(bool)
 test_labels = test_labels.astype(bool)
 val_labels = val_labels.astype(bool)
 
-print("Train labels are: ", train_labels)
-
 print("Train labels shape: ", train_labels.shape)
 print("Test labels shape: ", test_labels.shape)
 print("Val labels shape: ", val_labels.shape)
@@ -101,8 +99,8 @@ train_target = np.where(train_labels == 1, -1, 1)
 test_target = np.where(test_labels == 1, -1, 1)
 
 # Use indices to make PredefinedSplit
-train_idx = np.full( (normal_train_data.shape[0],) , -1, dtype=int)
-test_idx  = np.full( (normal_test_data.shape[0], ) , 0, dtype=int)
+train_idx = np.full( (train_data.shape[0],) , -1, dtype=int)
+test_idx  = np.full( (test_data.shape[0], ) , 0, dtype=int)
 
 test_fold = np.append(train_idx, test_idx)
 print(test_fold)
@@ -111,37 +109,86 @@ ps = PredefinedSplit(test_fold)
 
 # Set hyperparameters
 param_grid = {
-    'kernel': ('linear', 'poly', 'rbf'),
-    'degree': [2, 3, 4],
-    'gamma': 'auto', #loguniform(-3, 3),
-    'nu': 0.01 # nu <= 0 or n > 1
+    'kernel': ['linear', 'poly', 'rbf'],
+    'degree': randint(2,5),
+    'gamma': loguniform(1e-5, 3),
+    'nu': uniform(loc=0.01, scale=0.199) # nu <= 0 or n > 1
 }
 
-svc = OneClassSVM(kernel='rbf', gamma='auto', nu=0.01)
+#svc = OneClassSVM(kernel='rbf', gamma=0.001, nu=0.03)
+#print(svc)
+from sklearn.metrics import mean_absolute_error, make_scorer
+mae_scorer = make_scorer(mean_absolute_error)
+
 print("Running hyperparameter search...")
-#clf = RandomizedSearchCV(svc, param_distributions=param_grid, scoring='neg_mean_absolute_error', cv=ps)
+svc = RandomizedSearchCV(OneClassSVM(), param_distributions=param_grid,
+                        n_iter=100, scoring='neg_mean_absolute_error', cv=ps,
+                        random_state=0)
 #clf = GridSearchCV(svc, param_grid=param_grid, scoring='neg_mean_absolute_error', cv = ps)
 
 # Fit the NCV
 #clf.fit(normal_train_data) #, train_target[~train_labels])
-svc.fit(normal_train_data)
-# Predict on the anomalous
-#preds = clf.predict(test_data)
-preds = svc.predict(test_data)
-print(test_labels)
-print(test_labels.astype(int))
-print(np.unique(test_labels.astype(int)))
-
-def print_stats(predictions, labels):
-  print("Accuracy = {}".format(accuracy_score(labels, predictions)))
-  print("Precision = {}".format(precision_score(labels, predictions)))
-  print("Recall = {}".format(recall_score(labels, predictions)))
-
-print_stats(preds, test_labels.astype(int))
+svc.fit(train_data)
 
 # Print results
-print("Report: \n", pd.DataFrame(clf.cv_results_))
-print("Best inner loop score: ", clf.best_score_)
-print("Best parameters: ", clf.best_params_)
+print("Report: \n", pd.DataFrame(svc.cv_results_))
+print("Best inner loop score: ", svc.best_score_)
+print("Best parameters: ", svc.best_params_)
 
-print("Models took {} min. to run.".format((time.time() - start)/60))
+# Predict on the anomalous
+#preds = clf.predict(test_data)
+train_preds = svc.predict(train_data)
+test_preds = svc.predict(test_data)
+
+
+def print_stats(predictions, labels):
+  print("Accuracy = {:.4f}".format(accuracy_score(labels, predictions)))
+  print("Precision = {:.4f}".format(precision_score(labels, predictions)))
+  print("Recall = {:.4f}".format(recall_score(labels, predictions)))
+
+print("Train Prediction results: ")
+print("-"*40)
+print_stats(train_preds, train_target)
+print("\n")
+
+print("Test prediction results: ")
+print("-"*40)
+print_stats(test_preds, test_target)
+
+print("\n")
+print("Models took {:.4f} min. to run.".format((time.time() - start)/60))
+
+### Compare scores to get a threshold
+train_scores = svc.score_samples(train_data)
+threshold1 = np.quantile(train_scores, 0.01)
+threshold2 = np.mean(train_scores) + np.std(train_scores)
+
+print("\nQuantile Threshold: ", threshold1)
+print("1 standard deviation Threshold: ", threshold2)
+
+predicted_train_anomalies1 = np.where(train_scores <= threshold1, -1, 1)
+predicted_train_anomalies2 = np.where(train_scores <= threshold2, -1, 1)
+
+test_scores = svc.score_samples(test_data)
+
+predicted_test_anomalies1 = np.where(test_scores <= threshold1, -1, 1)
+predicted_test_anomalies2 = np.where(test_scores <= threshold2, -1, 1)
+
+print("\nEvaluation of the thresholds on the TRAIN data")
+print("-"*40)
+
+print("\nTRAIN Quantile Threshold: \n")
+print_stats(predicted_train_anomalies1, train_target)
+
+print("TRAIN STD Threshold: \n")
+print_stats(predicted_train_anomalies2, train_target)
+
+
+print("\nEvaluation of the thresholds on the TEST data")
+print("-"*40)
+
+print("\nTEST Quantile Threshold: \n")
+print_stats(predicted_test_anomalies1, test_target)
+
+print("TEST STD Threshold: \n")
+print_stats(predicted_test_anomalies2, test_target)
