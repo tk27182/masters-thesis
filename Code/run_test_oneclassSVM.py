@@ -115,25 +115,25 @@ param_grid = {
     'nu': uniform(loc=0.01, scale=0.199) # nu <= 0 or n > 1
 }
 
-#svc = OneClassSVM(kernel='rbf', gamma=0.001, nu=0.03)
+svc = OneClassSVM(kernel='rbf', gamma=0.001, nu=0.03)
 #print(svc)
 from sklearn.metrics import mean_absolute_error, make_scorer
 mae_scorer = make_scorer(mean_absolute_error)
 
-print("Running hyperparameter search...")
-svc = RandomizedSearchCV(OneClassSVM(), param_distributions=param_grid,
-                        n_iter=100, scoring='neg_mean_absolute_error', cv=ps,
-                        random_state=0)
+#print("Running hyperparameter search...")
+#svc = RandomizedSearchCV(OneClassSVM(), param_distributions=param_grid,
+#                        n_iter=100, scoring='neg_mean_absolute_error', cv=ps,
+#                        random_state=0)
 #clf = GridSearchCV(svc, param_grid=param_grid, scoring='neg_mean_absolute_error', cv = ps)
 
 # Fit the NCV
 #clf.fit(normal_train_data) #, train_target[~train_labels])
 svc.fit(train_data)
 
-# Print results
-print("Report: \n", pd.DataFrame(svc.cv_results_))
-print("Best inner loop score: ", svc.best_score_)
-print("Best parameters: ", svc.best_params_)
+# Print hyperparameter esults
+#print("Report: \n", pd.DataFrame(svc.cv_results_))
+#print("Best inner loop score: ", svc.best_score_)
+#print("Best parameters: ", svc.best_params_)
 
 # Predict on the anomalous
 #preds = clf.predict(test_data)
@@ -192,3 +192,18 @@ print_stats(predicted_test_anomalies1, test_target)
 
 print("TEST STD Threshold: \n")
 print_stats(predicted_test_anomalies2, test_target)
+
+### Visualize Performance
+# Return AU-ROC
+fpr_test1, tpr_test1, thresh_test1 = roc_curve(test_target, predicted_test_anomalies1)
+fpr_train1, tpr_train1, thresh_train1 = roc_curve(train_target, predicted_train_anomalies1)
+
+# Return AU-PRC
+ppr_test1, rec_test1, pthresh_test1 = precision_recall_curve(test_target, predicted_test_anomalies1)
+ppr_train1, rec_train1, pthresh_train1 = precision_recall_curve(train_target, predicted_train_anomalies1)
+
+viz.plot_roc_curve(tpr_train1, fpr_train1, None, None, tpr_test1, fpr_test1, title = "OneClassSVM Quantile Threshold")
+
+viz.plot_prc_curve(rec_train1, ppr_train1, None, None, rec_test1, ppr_test1, title = "OneClassSVM Quantile Threshold")
+
+plt.show()
