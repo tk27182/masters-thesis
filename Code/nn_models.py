@@ -25,6 +25,8 @@ from keras.layers import Dense, Embedding, Dropout, LSTM, Activation, Input, Con
 from keras.optimizers import Adam
 from keras.callbacks import EarlyStopping, Callback
 from keras.metrics import AUC, RootMeanSquaredError
+from tensorflow.keras.models import Model
+
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelBinarizer, LabelEncoder
@@ -72,6 +74,52 @@ class myCallback(Callback):
             else:
                 if self.print_msg:
                     print("\nTarget AUC has not been reached. Running another epoch...\n")
+
+
+class LSTMAutoEncoder(Model):
+    def __init__(self, timesteps, input_dim, lstm_dim):
+        super(LSTMAutoEncoder, self).__init__()
+        self.timesteps = timesteps
+        self.input_dim = input_dim
+        self.lstm_dim = lstm_dim
+
+
+        inputs = tf.keras.Input(shape=(self.timesteps, self.input_dim))
+        encoded = layers.LSTM(self.lstm_dim, return_sequences = True)(inputs)
+        self.encoder = tf.keras.Model(inputs, encoded)
+
+        decoded = tf.keras.layers.RepeatVector(self.timesteps)(encoded)
+        decoded = layers.LSTM(self.input_dim, return_sequences=True)(decoded)
+        #self.decoder = layers.Dense(self.input_dim)(self.decoder)
+        self.decoder = tf.keras.Model(inputs, decoded)
+
+    def call(self, x):
+        encoded = self.encoder(x)
+        decoded = self.decoder(encoded)
+        return decoded
+
+
+class AnomalyDetector(Model):
+  def __init__(self, num_input_features):
+    super(AnomalyDetector, self).__init__()
+    self.num_input = num_input_features
+
+    self.encoder = tf.keras.Sequential([
+      layers.Dense(32, activation="relu"),
+      layers.Dense(16, activation="relu"),
+      layers.Dense(8, activation="relu")])
+
+    self.decoder = tf.keras.Sequential([
+      layers.Dense(16, activation="relu"),
+      layers.Dense(32, activation="relu"),
+      layers.Dense(self.num_input, activation="sigmoid")])
+
+  def call(self, x):
+    encoded = self.encoder(x)
+    decoded = self.decoder(encoded)
+    return decoded
+
+
 '''
 class Conv1DTranspose(tf.keras.layers.Layer):
     # Borrowed from this Github issue workaround until the actual version is stable
@@ -113,7 +161,7 @@ def normalize_data(train_data, test_data, val_data):
 
     return norm_train_data, norm_test_data, norm_val_data
 
-def make_datset(data):
+def make_dataset(data):
     return np.reshape(data, (data.shape[0], 1, data.shape[1]))
 
 def train_test_val_split(data, target, test_size=0.2, val_size=0.25):
@@ -239,23 +287,23 @@ def build_test_ann(x_train, input_shape, num_hidden_nodes=10, classes = 2):
     #train_data.cardinality().numpy() #x_train.shape[1:]
     #print(input_shape)
     # Create a Normalization layer and set its internal state using the training data
-    normalizer = tf.keras.layers.Normalization()
-    normalizer.adapt(x_train)
+    #normalizer = tf.keras.layers.Normalization()
+    #normalizer.adapt(x_train)
 
     # Create a model that include the normalization layer
     model = tf.keras.Sequential(
         [
             #normalizer,
             # Input layer
-            tf.keras.layers.Input(shape=(input_shape)),
+            #tf.keras.layers.Input(shape=(input_shape)),
             #tf.keras.layers.Dense(10, activation = 'relu'),
-            tf.keras.layers.Dense(55, activation = 'relu', name = 'hidden-layer-1'),
-            tf.keras.layers.Dropout(0.2),
-            tf.keras.layers.Dense(33, activation = 'relu', name = 'hidden-layer-2'),
+            tf.keras.layers.Dense(64, activation = 'relu', name = 'hidden-layer-1'),
+            #tf.keras.layers.Dropout(0.2),
+            tf.keras.layers.Dense(64, activation = 'relu', name = 'hidden-layer-2'),
             # Hidden layer
             tf.keras.layers.Dense(num_hidden_nodes, activation = 'relu', name = 'hidden-layer-3'),
             # Output layer
-            tf.keras.layers.Dense(classes, activation = 'softmax', name = 'output'),
+            tf.keras.layers.Dense(classes, activation = 'softmax', name = 'predictions'),
         ]
     )
 
@@ -417,11 +465,11 @@ def compile_model(model, X_train, y_train, X_val = None, y_val = None, callbacks
     if (X_val is not None) and (y_val is not None): #val_data is not None: #
         #mdl.fit(train_data, epochs=epochs, batch_size=batch_size, callbacks=callbacks,
         #        validation_data=val_data)
-        mdl.fit(X_train, y_train, epochs = epochs, batch_size=batch_size, callbacks=callbacks,
-                validation_data = (X_val, y_val))
+        mdl.fit(X_train, y_train, epochs = epochs, batch_size=batch_size,
+                callbacks=callbacks, validation_data = (X_val, y_val))
     else:
-        #mdl.fit(train_data, epochs=epochs, batch_size=batch_size, callbacks=callbacks)
-        mdl.fit(X_train, y_train, epochs = epochs, batch_size=batch_size, callbacks=callbacks)
+        mdl.fit(train_data, epochs=epochs, batch_size=batch_size, callbacks=callbacks)
+        #mdl.fit(X_train, y_train, epochs = epochs, callbacks=callbacks)
 
     return mdl
 
