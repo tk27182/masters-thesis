@@ -75,35 +75,7 @@ class myCallback(Callback):
                 if self.print_msg:
                     print("\nTarget AUC has not been reached. Running another epoch...\n")
 
-def lstm_autoencoder(timesteps, input_dim, lstm_dim):
 
-    inputs = tf.keras.Input(shape=(timesteps, input_dim))
-    encoded = tf.keras.layers.LSTM(lstm_dim, return_sequences=False, name = "encoder")(inputs)
-
-    decoded = tf.keras.layers.RepeatVector(timesteps, name = 'RepeatVector')(encoded)
-    decoded = tf.keras.layers.LSTM(input_dim, return_sequences=True, name = 'decoder')(decoded)
-
-    sequence_autoencoder = tf.keras.Model(inputs, decoded)
-    encoder = tf.keras.Model(inputs, encoded)
-
-    return sequence_autoencoder, encoder
-
-def deep_lstm_autoencoder(timesteps, input_dim, lstm_dim):
-
-    autoencoder = tf.keras.Sequential()
-
-    autoencoder.add(tf.keras.Input(shape=(timesteps, input_dim)))
-    autoencoder.add(tf.keras.layers.LSTM(lstm_dim, return_sequences=False,
-                                 name = "encoder"))
-
-    #autoencoder = tf.keras.Sequential()
-    autoencoder.add(tf.keras.layers.RepeatVector(timesteps))
-    autoencoder.add(tf.keras.layers.LSTM(input_dim,
-                                    return_sequences=True, name = 'decoder'))
-    autoencoder.add(tf.keras.layers.TimeDistributed(
-                            tf.keras.layers.Dense(input_dim)
-    ))
-    return autoencoder
 
 class DeepLSTMAutoEncoder(Model):
     def __init__(self, timesteps, input_dim, code_dim, lstm_dim, num_layers):
