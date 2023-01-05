@@ -106,6 +106,85 @@ class myCallback(Callback):
                 if self.print_msg:
                     print("\nTarget AU-PRC has not been reached. Running another epoch...\n")
 
+### From RNN example of how it works
+class MinimalRNNCell(keras.layers.Layer):
+
+    def __init__(self, units, **kwargs):
+        self.units = units
+        self.state_size = units
+        super(MinimalRNNCell, self).__init__(**kwargs)
+
+    def build(self, input_shape):
+        # Add wait is a method of keras.layers.Layer
+        # Add weights for the input matrix
+        self.kernel = self.add_weight(shape=(input_shape[-1], self.units),
+                                      initializer='uniform',
+                                      name='kernel')
+        # Add weights for the previous state matrix
+        self.recurrent_kernel = self.add_weight(
+            shape=(self.units, self.units),
+            initializer='uniform',
+            name='recurrent_kernel')
+        self.built = True
+
+    def call(self, inputs, states):
+        # This is where you can do the calculations to adjust the simple RNN cell
+        prev_output = states[0]
+        # Get the current state
+        h = keras.backend.dot(inputs, self.kernel)
+        # Add the previous state
+        output = h + keras.backend.dot(prev_output, self.recurrent_kernel)
+        return output, [output]
+
+def build_lstm_model(lstm_nodes, num_features):
+    model = tf.keras.models.Sequential()
+
+    # Shape [batch, time, features] => [batch, time, lstm_units]
+    model.add(tf.keras.layers.LSTM(lstm_nodes, return_sequences=True))
+    model.add(tf.keras.layers.LSTM(lstm_nodes/2, return_sequences=False))
+    # Shape => [batch, time, features]
+    model.add(tf.keras.layers.Dense(units=num_features, activation = 'softmax', name = 'predictions'))
+    return model
+
+def build_bidirectional_lstm_model(lstm_nodes, num_features):
+
+    model = tf.keras.models.Sequential()
+
+    # Shape [batch, time, features] => [batch, time, lstm_units]
+    model.add(tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(lstm_nodes, return_sequences=True)))
+    model.add(tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(lstm_nodes/2, return_sequences=False)))
+    # Shape => [batch, time, features]
+    model.add(tf.keras.layers.Dense(units=num_features, activation = 'softmax', name = 'predictions'))
+    return model
+
+def build_simplernn_model(rnn_nodes, num_features):
+
+    model = tf.keras.models.Sequential()
+    # Shape [batch, time, features] => [batch, time, lstm_units]
+    model.add(tf.keras.layers.SimpleRNN(rnn_nodes))
+    # Shape => [batch, time, features]
+    model.add(tf.keras.layers.Dense(units=num_features, activation = 'softmax', name = 'predictions'))
+    return model
+
+def build_bidirectional_simplernn_model(rnn_nodes, num_features):
+
+    model = tf.keras.models.Sequential()
+    # Shape [batch, time, features] => [batch, time, lstm_units]
+    model.add(tf.keras.layers.Bidirectional(tf.keras.layers.SimpleRNN(rnn_nodes)))
+    # Shape => [batch, time, features]
+    model.add(tf.keras.layers.Dense(units=num_features, activation = 'softmax', name = 'predictions'))
+    return model
+
+def build_rnn_cell_model(rnn_nodes, num_features):
+
+    cell = MinimalRNNCell(rnn_nodes)
+
+    model = tf.keras.models.Sequential()
+
+    model.add(tf.keras.layers.RNN(cell))
+    model.add(tf.keras.layers.Dense(units=num_features, activation= 'softmax', name = 'predictions'))
+    return model
+
 def hypertune_lstm(hp):
     model = tf.keras.models.Sequential()
     # Tune the number of hidden layers
@@ -366,46 +445,6 @@ def split_data_cv_indx(data, target, test_size=0.2):
 
     return train_indx, test_indx, val_indx
 
-def build_cl_lstm(input_nodes=3, output_nodes=2, lstm_nodes = 16, dropout=0.2,
-                    input_act_func='relu', output_act_func='softmax'):
-
-    '''
-    Description: Builds a LSTM for classification.
-
-    Parameters
-    -----------
-    input_nodes - int: number of nodes in the input layer (should be the number of variables in your dataset)
-    output_nodes - int: number of classes being predicted (binary = 2)
-    lstm_nodes - int: number of nodes for the LSTM layer
-    dropout - float: dropout rate
-    input_act_func - str: activation function for the input layer ('relu', 'sigmoid', 'tanh')
-    output_act_func - str: activation function for the output layer
-
-    Returns
-    -----------
-    model - tensorflow model: built neural network
-    '''
-
-    # Create new model
-    model = Sequential()
-    # Add an Input layer expecting input size N_i, and
-    # output embedding dimension of size 1.
-    model.add(Dense(input_nodes, activation = input_act_func, input_shape = (input_nodes, 1)))
-
-    model.add(LSTM(lstm_nodes, return_sequences = False, # False to predict only the next value, not each next value
-                   input_shape = (input_nodes, 1)))
-
-    # Add dropout layer to prevent overfitting by ignoring randomly selected neurons
-    model.add(Dropout(dropout))
-
-    # Add a Dense layer with 2 units.
-    model.add(Dense(units = output_nodes)) #, activation=output_act_func))
-
-    # Add activation layer as softmax to interpret outputs as probabilities
-    model.add(Activation(output_act_func))
-
-    return model
-
 def build_test_ann(x_train, input_shape, num_hidden_nodes=10, classes = 2):
 
     #x_train = x_train.reshape((len(x_train), -1))
@@ -469,82 +508,6 @@ def build_cl_ann(num_layers=3, architecture=[128, 32, 8],
 
     model = Sequential(layers)
     return model
-
-def build_autocencoder(input_shape, num_layers, hidden_nodes, dropout):
-    '''
-    Description
-    ------------
-    Builds an autoencoder model for anomaly detection
-
-    Parameters
-    ------------
-    hidden_nodes - list: nodes for each layer
-    dropout - float: dropout rate
-    # code_size - int: number of nodes in center layer (not included in hidden_nodes)
-    num_outputs - int: number of unique target values
-
-    Returns
-    ------------
-    model - tf.keras.models.Sequential object: model to be trained
-
-    Notes: Could be adjusted for varying numbers of hidden layers
-    '''
-    # Check that the number of nodes per hidden layer matches the number of layers
-    if len(hidden_nodes) != num_layers:
-        raise ValueError("Number of hidden layers does not match the number of nodes per layer")
-
-    # Add hidden layers with dropout between them
-    layers = []
-    # Add Input layer
-    layers.append(Dense(input_shape, activation = 'relu', input_dim=input_shape ))
-    layers.append(Dropout(dropout))
-
-    for i in range(num_layers):
-        layers.append(Dense(hidden_nodes[i], activation = 'relu'))
-        layers.append(Dropout(dropout))
-    # Add output layer
-    layers.append(
-            Dense(input_shape, activation = 'sigmoid')
-    )
-
-    model = Sequential(layers)
-    return model
-'''
-# This model is under construction because Conv1DTranspose is not implemented in the stable version
-# of TensorFlow. Another version of autoencoder is built for use
-def build_autocencoder(shape, filters=[32, 16, 16, 32], kernel_size=7, padding='same', strides=2, activation="relu", dropout=0.2):
-
-    model = Sequential(
-            [
-                Input(shape=shape),
-                Conv1D(
-                        filters=filters[0], kernel_size=kernel_size, padding=padding, strides=strides, activation=activation
-                ),
-                Dropout(rate=dropout),
-                Conv1D(
-                        filters=filters[1], kernel_size=kernel_size, padding=padding, strides=strides, activation=activation
-                ),
-                ### Recreate Conv1DTranspose like described here
-                # https://github.com/keras-team/keras-io/issues/124#issuecomment-655348405
-                Conv1D(
-                        filters=filters[2], kernel_size=kernel_size, padding=padding, strides=strides, activation=activation
-                ),
-                UpSampling1D(size=3),
-                #Conv1DTranspose(
-                #        filters=filters[2], kernel_size=kernel_size, padding=padding, strides=strides#, activation=activation
-                #),
-                Dropout(rate=dropout),
-                Conv1D(
-                        filters=filters[3], kernel_size=kernel_size, padding=padding
-                ),
-                UpSampling1D(size=3)
-                #Conv1DTranspose(
-                #        filters=filters[3], kernel_size=kernel_size, padding=padding
-                #)
-            ]
-    )
-    return model
-'''
 
 def hypertune_ann(hp):
 
