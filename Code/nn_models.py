@@ -135,6 +135,36 @@ def hypertune_lstm(hp):
                     )
     return model
 
+def hypertune_autoencoder(hp):
+
+    lstm_dim = hp.Int("units", min_value = 32, max_value=256, step = 16)
+
+    autoencoder = nnm.LSTMAutoEncoder(timesteps, input_dim, lstm_dim) #, timesteps) #nnm.AnomalyDetector(data.shape[1])
+
+    # Tune the learning rate
+    hp_learning_rate = hp.Choice('learning_rate', values=[1e-4, 5e-4, 1e-3, 2e-3, 5e-3])
+
+    autoencoder.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=hp_learning_rate),
+                        loss='mean_squared_error')
+
+    return autoencoder
+
+def hypertune_deep_autoencoder(hp):
+
+    code_dim = hp.Int("code_units", min_value = 4, max_value = 8, step = 1)
+    lstm_dim = hp.Int("units", min_value = 60, max_value = 640, step = 5)
+    num_layers = hp.Int("layers", min_value = 2, max_value = 6, step = 1)
+
+    autoencoder = nnm.DeepLSTMAutoEncoder(timesteps, input_dim, code_dim, lstm_dim, num_layers)
+
+    # Tune the learning rate
+    hp_learning_rate = hp.Choice('learning_rate', values=[1e-3, 5e-3])
+
+    autoencoder.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=hp_learning_rate),
+                        loss='mean_squared_error')
+
+    return autoencoder
+
 class DeepLSTMAutoEncoder(Model):
     def __init__(self, timesteps, input_dim, code_dim, lstm_dim, num_layers):
         super(DeepLSTMAutoEncoder, self).__init__()
