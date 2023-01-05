@@ -43,11 +43,12 @@ class myCallback(Callback):
     '''
     Used to determine optimal number of epochs for chosen metric
     '''
-    def __init__(self, auc_name='auc', acc_name='acc', auc_thresh=0.99, acc_thresh=0.95, print_msg=True):
+    def __init__(self, auprc_name = 'prc', auc_name='auc', recall_name='recall', prec_name = 'precision', acc_name='acc', auprc_thresh=0.99, auc_thresh=0.99, recall_thresh = 0.8, prec_thresh = 0.8, acc_thresh=0.95, print_msg=True):
 
         # When running multiple models, the names have numbers of them that need to be included (i.e. auc_1)
         self.auc_name = auc_name
         self.acc_name = acc_name
+        self.auprc_name = auprc_name
         # Set the threshold values
         self.auc_thresh = auc_thresh
         self.acc_thresh = acc_thresh
@@ -65,6 +66,26 @@ class myCallback(Callback):
                 if self.print_msg:
                     print("\nTarget accuracy has not been reached. Running another epoch...\n")
 
+        # Check Recall vs epoch
+        if self.recall_name in logs:
+            if logs.get(self.recall_name) > self.recall_thresh:
+                if self.print_msg:
+                    print(f"\nReached Recall of {self.recall_thresh}. Training is stopping.\n")
+                self.model.stop_training = True
+            else:
+                if self.print_msg:
+                    print("\nTarget Recall has not been reached. Running another epoch...\n")
+
+        # Check Precision vs epoch
+        if self.prec_name in logs:
+            if logs.get(self.prec_name) > self.prec_thresh:
+                if self.print_msg:
+                    print(f"\nReached Precision of {self.prec_thresh}. Training is stopping.\n")
+                self.model.stop_training = True
+            else:
+                if self.print_msg:
+                    print("\nTarget Precision has not been reached. Running another epoch...\n")
+
         # Check AUC vs epoch
         if self.auc_name in logs:
             if logs.get(self.auc_name) > self.auc_thresh:
@@ -75,7 +96,44 @@ class myCallback(Callback):
                 if self.print_msg:
                     print("\nTarget AUC has not been reached. Running another epoch...\n")
 
+        # Check AU-PRC vs epoch
+        if self.auprc_name in logs:
+            if logs.get(self.auprc_name) > self.auprc_thresh:
+                if self.print_msg:
+                    print(f"\nReached AU-PRC of {self.auprc_thresh}. Training is stopping.\n")
+                self.model.stop_training = True
+            else:
+                if self.print_msg:
+                    print("\nTarget AU-PRC has not been reached. Running another epoch...\n")
 
+def hypertune_lstm(hp):
+    model = tf.keras.models.Sequential()
+    # Tune the number of hidden layers
+    #for i in range(hp.Int("hidden_layers", min_value=1, max_value=5, step=1)):
+    for i in range(hp.Int("hidden_layers", min_value=0, max_value=5, step=1)):
+        # Tune the number of nodes in the hidden layers
+        # Choose an optimal value between 10 and 80
+        hp_units = hp.Int(f'units-{i}', min_value=10, max_value=256, step=5)
+        model.add(tf.keras.layers.LSTM(units=hp_units, return_sequences=True,
+                                        name = f'LSTM-layer-{i}'))
+
+    # Output layer
+    model.add(tf.keras.layers.LSTM(8, return_sequences=False, name = 'final-LSTM-layer'))
+    model.add(tf.keras.layers.Dense(2, activation='softmax', name = 'predictions'))
+
+    # Tune the learning rate
+    hp_learning_rate = hp.Choice('learning_rate', values=[1e-4, 5e-4, 1e-3, 2e-3, 5e-3])
+
+    model.compile(optimizer=keras.optimizers.Adam(learning_rate=hp_learning_rate), \
+                    loss = keras.losses.BinaryCrossentropy(),
+                    metrics = [
+                    keras.metrics.BinaryAccuracy(name='accuracy'),
+                    keras.metrics.Precision(name='precision'),
+                    keras.metrics.Recall(name='recall'),
+                    keras.metrics.AUC(name='auc'),
+                    keras.metrics.AUC(name='prc', curve='PR') ]
+                    )
+    return model
 
 class DeepLSTMAutoEncoder(Model):
     def __init__(self, timesteps, input_dim, code_dim, lstm_dim, num_layers):
