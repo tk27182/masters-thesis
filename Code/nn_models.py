@@ -136,6 +136,85 @@ class MinimalRNNCell(keras.layers.Layer):
         output = h + keras.backend.dot(prev_output, self.recurrent_kernel)
         return output, [output]
 
+class DeepLSTMAutoEncoder(Model):
+    def __init__(self, timesteps, input_dim, code_dim, lstm_dim, num_layers):
+        super(DeepLSTMAutoEncoder, self).__init__()
+        self.timesteps = timesteps
+        self.input_dim = input_dim
+        self.code_dim = code_dim
+        self.lstm_dim = lstm_dim
+        self.num_layers = num_layers
+
+        self.encoder = tf.keras.Sequential()
+        self.encoder.add(tf.keras.Input(shape=(self.timesteps, self.input_dim)))
+
+        for i in range(1, self.num_layers):
+            self.encoder.add(tf.keras.layers.LSTM(int(self.lstm_dim/i), return_sequences = True))
+
+        self.encoder.add(tf.keras.layers.LSTM(self.code_dim, return_sequences = False, name = 'encoder'))
+
+        self.decoder = tf.keras.Sequential()
+        self.decoder.add(tf.keras.layers.RepeatVector(self.timesteps))
+
+        for i in range(1, self.num_layers):
+            self.decoder.add(tf.keras.layers.LSTM(int(self.lstm_dim/i), return_sequences = True))
+
+        self.decoder.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(self.input_dim)))
+
+    def call(self, x):
+        encoded = self.encoder(x)
+        decoded = self.decoder(encoded)
+        return decoded
+
+
+class LSTMAutoEncoder(Model):
+    def __init__(self, timesteps, input_dim, lstm_dim):
+        super(LSTMAutoEncoder, self).__init__()
+        self.timesteps = timesteps
+        self.input_dim = input_dim
+        self.lstm_dim = lstm_dim
+
+        self.encoder = tf.keras.Sequential()
+        self.encoder.add(tf.keras.Input(shape=(self.timesteps, self.input_dim)))
+        self.encoder.add(tf.keras.layers.LSTM(self.lstm_dim, return_sequences=False,
+                                     name = "encoder"))
+
+        self.decoder = tf.keras.Sequential()
+        self.decoder.add(tf.keras.layers.RepeatVector(self.timesteps))
+        self.decoder.add(tf.keras.layers.LSTM(self.input_dim,
+                                        return_sequences=True, name = 'decoder'))
+        self.decoder.add(tf.keras.layers.TimeDistributed(
+                                tf.keras.layers.Dense(self.input_dim)
+        ))
+
+        #self.decoder.add(tf.keras.layers.Activation('linear'))
+
+    def call(self, x):
+        encoded = self.encoder(x)
+        decoded = self.decoder(encoded)
+        return decoded
+
+
+class AnomalyDetector(Model):
+  def __init__(self, num_input_features):
+    super(AnomalyDetector, self).__init__()
+    self.num_input = num_input_features
+
+    self.encoder = tf.keras.Sequential([
+      layers.Dense(32, activation="relu"),
+      layers.Dense(16, activation="relu"),
+      layers.Dense(8, activation="relu")])
+
+    self.decoder = tf.keras.Sequential([
+      layers.Dense(16, activation="relu"),
+      layers.Dense(32, activation="relu"),
+      layers.Dense(self.num_input, activation="sigmoid")])
+
+  def call(self, x):
+    encoded = self.encoder(x)
+    decoded = self.decoder(encoded)
+    return decoded
+    
 def build_lstm_model(lstm_nodes, num_features):
     model = tf.keras.models.Sequential()
 
@@ -243,103 +322,6 @@ def hypertune_deep_autoencoder(hp):
                         loss='mean_squared_error')
 
     return autoencoder
-
-class DeepLSTMAutoEncoder(Model):
-    def __init__(self, timesteps, input_dim, code_dim, lstm_dim, num_layers):
-        super(DeepLSTMAutoEncoder, self).__init__()
-        self.timesteps = timesteps
-        self.input_dim = input_dim
-        self.code_dim = code_dim
-        self.lstm_dim = lstm_dim
-        self.num_layers = num_layers
-
-        self.encoder = tf.keras.Sequential()
-        self.encoder.add(tf.keras.Input(shape=(self.timesteps, self.input_dim)))
-
-        for i in range(1, self.num_layers):
-            self.encoder.add(tf.keras.layers.LSTM(int(self.lstm_dim/i), return_sequences = True))
-
-        self.encoder.add(tf.keras.layers.LSTM(self.code_dim, return_sequences = False, name = 'encoder'))
-
-        self.decoder = tf.keras.Sequential()
-        self.decoder.add(tf.keras.layers.RepeatVector(self.timesteps))
-
-        for i in range(1, self.num_layers):
-            self.decoder.add(tf.keras.layers.LSTM(int(self.lstm_dim/i), return_sequences = True))
-
-        self.decoder.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(self.input_dim)))
-
-    def call(self, x):
-        encoded = self.encoder(x)
-        decoded = self.decoder(encoded)
-        return decoded
-
-
-class LSTMAutoEncoder(Model):
-    def __init__(self, timesteps, input_dim, lstm_dim):
-        super(LSTMAutoEncoder, self).__init__()
-        self.timesteps = timesteps
-        self.input_dim = input_dim
-        self.lstm_dim = lstm_dim
-
-        self.encoder = tf.keras.Sequential()
-        self.encoder.add(tf.keras.Input(shape=(self.timesteps, self.input_dim)))
-        self.encoder.add(tf.keras.layers.LSTM(self.lstm_dim, return_sequences=False,
-                                     name = "encoder"))
-
-        self.decoder = tf.keras.Sequential()
-        self.decoder.add(tf.keras.layers.RepeatVector(self.timesteps))
-        self.decoder.add(tf.keras.layers.LSTM(self.input_dim,
-                                        return_sequences=True, name = 'decoder'))
-        self.decoder.add(tf.keras.layers.TimeDistributed(
-                                tf.keras.layers.Dense(self.input_dim)
-        ))
-
-        #self.decoder.add(tf.keras.layers.Activation('linear'))
-
-    def call(self, x):
-        encoded = self.encoder(x)
-        decoded = self.decoder(encoded)
-        return decoded
-
-
-class AnomalyDetector(Model):
-  def __init__(self, num_input_features):
-    super(AnomalyDetector, self).__init__()
-    self.num_input = num_input_features
-
-    self.encoder = tf.keras.Sequential([
-      layers.Dense(32, activation="relu"),
-      layers.Dense(16, activation="relu"),
-      layers.Dense(8, activation="relu")])
-
-    self.decoder = tf.keras.Sequential([
-      layers.Dense(16, activation="relu"),
-      layers.Dense(32, activation="relu"),
-      layers.Dense(self.num_input, activation="sigmoid")])
-
-  def call(self, x):
-    encoded = self.encoder(x)
-    decoded = self.decoder(encoded)
-    return decoded
-
-
-'''
-class Conv1DTranspose(tf.keras.layers.Layer):
-    # Borrowed from this Github issue workaround until the actual version is stable
-    # https://github.com/tensorflow/tensorflow/issues/30309#issuecomment-589531625
-    def __init__(self, filters, kernel_size, strides=1, padding='valid'):
-        super().__init__()
-        self.conv2dtranspose = tf.keras.layers.Conv2DTranspose(
-          filters, (kernel_size, 1), (strides, 1), padding
-        )
-
-    def call(self, x):
-        x = tf.expand_dims(x, axis=2)
-        x = self.conv2dtranspose(x)
-        x = tf.squeeze(x, axis=2)
-        return x
-'''
 
 def min_max_data(train_data, test_data, val_data):
 
