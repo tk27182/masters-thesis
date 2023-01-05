@@ -38,9 +38,15 @@ class CollectResults:
 
         return results
 
-def plot_window(data, hue_idx=None):
 
-    print(data[:5,:])
+def plot_window(data, target, hue_col):
+
+    df = pd.DataFrame(data=data, columns = [f't{i}_l' for i in range(1,49,1)] + [f't{i}_r' for i in range(1,49,1)])
+    df['target'] = target
+    df['id'] = df.index
+
+    ldf = pd.wide_to_long(df, "t", i='id', j='sensor', sep='_', suffix=['l', 'r'])
+
     fig, ax = plt.subplots(figsize=(10, 8))
 
     #if hue_idx is None:
@@ -48,7 +54,7 @@ def plot_window(data, hue_idx=None):
     #if hue_idx == -1:
     #    hue_idx = data.T.shape[1] -1
 
-    sns.lineplot(data, hue= hue_idx, ax = ax)
+    sns.lineplot(ldf, hue= hue_idx, ax = ax)
 
     ax.set(xlabel = 'Time [15 min.]', ylabel = 'Glucose [mg/dL]')
 
@@ -83,7 +89,7 @@ def plot_loss(train_loss, val_loss, title = None, save_name = None):
     return ax
 
 
-def plot_confusionmatrix(pred_labels, true_labels, save_name = None):
+def plot_confusionmatrix(pred_labels, true_labels, title = None, save_name = None):
 
     df = pd.DataFrame({"True Class": true_labels, "Predicted Class": pred_labels})
     cm = pd.crosstab(df['Predicted Class'], df['True Class'], margins=True)
@@ -119,48 +125,54 @@ def plot_confusionmatrix(pred_labels, true_labels, save_name = None):
     ax.xaxis.tick_top()
     ax.xaxis.set_label_position('top')
 
+    ax.set_title(title)
+
     if save_name is not None:
         fig.savefig(save_name, dpi = 300, bbox_inches = 'tight')
 
     return ax
 
-def plot_roc_curve(train_tpr, train_fpr, val_tpr, val_fpr, test_tpr, test_fpr, save_name = None):
+def plot_roc_curve(train_tpr, train_fpr, val_tpr, val_fpr, test_tpr, test_fpr, title = '', save_name = None):
 
     train_auc = auc(train_fpr, train_tpr)
     test_auc = auc(test_fpr, test_tpr)
-    val_auc = auc(val_fpr, val_tpr)
+    if (val_tpr is not None) and (val_fpr is not None):
+        val_auc = auc(val_fpr, val_tpr)
 
     fig, ax = plt.subplots(figsize=(8,6))
 
     ax.plot(train_fpr, train_tpr, color = 'xkcd:black', linestyle='-', label = f'Train AUC: {train_auc:0.4f}')
-    ax.plot(val_fpr, val_tpr, color = 'xkcd:orange', linestyle=':', label = f'Validation AUC: {val_auc:0.4f}')
+    if (val_tpr is not None) and (val_fpr is not None):
+        ax.plot(val_fpr, val_tpr, color = 'xkcd:orange', linestyle=':', label = f'Validation AUC: {val_auc:0.4f}')
     ax.plot(test_fpr, test_tpr, color = 'xkcd:pink', linestyle='--', label = f'Test AUC: {test_auc:0.4f}')
     ax.plot([0,1], [0,1], color = 'xkcd:red', linestyle='--')
 
     ax.set_xlabel('False Positive Rate (FPR)')
     ax.set_ylabel('True Positive Rate (TPR)')
-    ax.set_title("ROC Curve")
+    ax.set_title(f"{title} ROC Curve")
 
     ax.legend(loc = 'right')
 
     return ax
 
-def plot_prc_curve(train_rec, train_ppv, val_rec, val_ppv, test_rec, test_ppv, save_name = None):
+def plot_prc_curve(train_rec, train_ppv, val_rec, val_ppv, test_rec, test_ppv, title = '', save_name = None):
 
     train_auprc = auc(train_rec, train_ppv)
     test_auprc = auc(test_rec, test_ppv)
-    val_auprc = auc(val_rec, val_ppv)
+    if (val_rec is not None) and (val_ppv is not None):
+        val_auprc = auc(val_rec, val_ppv)
 
     fig, ax = plt.subplots(figsize=(8,6))
 
     ax.plot(train_rec, train_ppv, color = 'xkcd:black', linestyle='-', label = f'Train AUC: {train_auprc:0.4f}')
-    ax.plot(val_rec, val_ppv, color = 'xkcd:orange', linestyle=':', label = f'Validation AUC: {val_auprc:0.4f}')
+    if (val_rec is not None) and (val_ppv is not None):
+        ax.plot(val_rec, val_ppv, color = 'xkcd:orange', linestyle=':', label = f'Validation AUC: {val_auprc:0.4f}')
     ax.plot(test_rec, test_ppv, color = 'xkcd:pink', linestyle='--', label = f'Test AUC: {test_auprc:0.4f}')
     ax.plot([0,1], [0.5,0.5], color = 'xkcd:red', linestyle='--')
 
     ax.set_xlabel('Recall')
     ax.set_ylabel('Precision')
-    ax.set_title("Precision-Recall Curve")
+    ax.set_title(f"{title} Precision-Recall Curve")
 
     ax.legend(loc = 'lower right')
 
