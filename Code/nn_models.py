@@ -75,6 +75,66 @@ class myCallback(Callback):
                 if self.print_msg:
                     print("\nTarget AUC has not been reached. Running another epoch...\n")
 
+def lstm_autoencoder(timesteps, input_dim, lstm_dim):
+
+    inputs = tf.keras.Input(shape=(timesteps, input_dim))
+    encoded = tf.keras.layers.LSTM(lstm_dim, return_sequences=False, name = "encoder")(inputs)
+
+    decoded = tf.keras.layers.RepeatVector(timesteps, name = 'RepeatVector')(encoded)
+    decoded = tf.keras.layers.LSTM(input_dim, return_sequences=True, name = 'decoder')(decoded)
+
+    sequence_autoencoder = tf.keras.Model(inputs, decoded)
+    encoder = tf.keras.Model(inputs, encoded)
+
+    return sequence_autoencoder, encoder
+
+def deep_lstm_autoencoder(timesteps, input_dim, lstm_dim):
+
+    autoencoder = tf.keras.Sequential()
+
+    autoencoder.add(tf.keras.Input(shape=(timesteps, input_dim)))
+    autoencoder.add(tf.keras.layers.LSTM(lstm_dim, return_sequences=False,
+                                 name = "encoder"))
+
+    #autoencoder = tf.keras.Sequential()
+    autoencoder.add(tf.keras.layers.RepeatVector(timesteps))
+    autoencoder.add(tf.keras.layers.LSTM(input_dim,
+                                    return_sequences=True, name = 'decoder'))
+    autoencoder.add(tf.keras.layers.TimeDistributed(
+                            tf.keras.layers.Dense(input_dim)
+    ))
+    return autoencoder
+
+class DeepLSTMAutoEncoder(Model):
+    def __init__(self, timesteps, input_dim, code_dim, lstm_dim, num_layers):
+        super(DeepLSTMAutoEncoder, self).__init__()
+        self.timesteps = timesteps
+        self.input_dim = input_dim
+        self.code_dim = code_dim
+        self.lstm_dim = lstm_dim
+        self.num_layers = num_layers
+
+        self.encoder = tf.keras.Sequential()
+        self.encoder.add(tf.keras.Input(shape=(self.timesteps, self.input_dim)))
+
+        for i in range(1, self.num_layers):
+            self.encoder.add(tf.keras.layers.LSTM(int(self.lstm_dim/i), return_sequences = True))
+
+        self.encoder.add(tf.keras.layers.LSTM(self.code_dim, return_sequences = False, name = 'encoder'))
+
+        self.decoder = tf.keras.Sequential()
+        self.decoder.add(tf.keras.layers.RepeatVector(self.timesteps))
+
+        for i in range(1, self.num_layers):
+            self.decoder.add(tf.keras.layers.LSTM(int(self.lstm_dim/i), return_sequences = True))
+
+        self.decoder.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(self.input_dim)))
+
+    def call(self, x):
+        encoded = self.encoder(x)
+        decoded = self.decoder(encoded)
+        return decoded
+
 
 class LSTMAutoEncoder(Model):
     def __init__(self, timesteps, input_dim, lstm_dim):
@@ -83,15 +143,20 @@ class LSTMAutoEncoder(Model):
         self.input_dim = input_dim
         self.lstm_dim = lstm_dim
 
+        self.encoder = tf.keras.Sequential()
+        self.encoder.add(tf.keras.Input(shape=(self.timesteps, self.input_dim)))
+        self.encoder.add(tf.keras.layers.LSTM(self.lstm_dim, return_sequences=False,
+                                     name = "encoder"))
 
-        inputs = tf.keras.Input(shape=(self.timesteps, self.input_dim))
-        encoded = layers.LSTM(self.lstm_dim, return_sequences = True)(inputs)
-        self.encoder = tf.keras.Model(inputs, encoded)
+        self.decoder = tf.keras.Sequential()
+        self.decoder.add(tf.keras.layers.RepeatVector(self.timesteps))
+        self.decoder.add(tf.keras.layers.LSTM(self.input_dim,
+                                        return_sequences=True, name = 'decoder'))
+        self.decoder.add(tf.keras.layers.TimeDistributed(
+                                tf.keras.layers.Dense(self.input_dim)
+        ))
 
-        decoded = tf.keras.layers.RepeatVector(self.timesteps)(encoded)
-        decoded = layers.LSTM(self.input_dim, return_sequences=True)(decoded)
-        #self.decoder = layers.Dense(self.input_dim)(self.decoder)
-        self.decoder = tf.keras.Model(inputs, decoded)
+        #self.decoder.add(tf.keras.layers.Activation('linear'))
 
     def call(self, x):
         encoded = self.encoder(x)
