@@ -11,8 +11,6 @@ import scipy.io as sio
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
-import nn_models as nnm
-import visualization as viz
 import matplotlib.pyplot as plt
 import keras_tuner as kt
 
@@ -20,6 +18,8 @@ from sklearn.metrics import roc_curve, auc, precision_recall_curve, f1_score
 from sklearn.utils import class_weight
 
 import dataprocessing as dp
+import nn_models as nnm
+import visualization as viz
 
 print("Just imported libraries!")
 tf.random.set_seed(0)
@@ -81,13 +81,15 @@ def hypertune_lstm(hp):
     model = tf.keras.models.Sequential()
     # Tune the number of hidden layers
     #for i in range(hp.Int("hidden_layers", min_value=1, max_value=5, step=1)):
-
-    # Tune the number of nodes in the hidden layers
-    # Choose an optimal value between 10 and 80
-    hp_units = hp.Int(f'units', min_value=10, max_value=256, step=5)
-    model.add(tf.keras.layers.LSTM(units=hp_units, activation = 'relu', name = 'first-LSTM-layer'))
+    for i in range(hp.Int("hidden_layers", min_value=0, max_value=5, step=1)):
+        # Tune the number of nodes in the hidden layers
+        # Choose an optimal value between 10 and 80
+        hp_units = hp.Int(f'units-{i}', min_value=10, max_value=256, step=5)
+        model.add(tf.keras.layers.LSTM(units=hp_units, return_sequences=True,
+                                        name = f'LSTM-layer-{i}'))
 
     # Output layer
+    model.add(tf.keras.layers.LSTM(8, return_sequences=False, name = 'final-LSTM-layer'))
     model.add(tf.keras.layers.Dense(2, activation='softmax', name = 'predictions'))
 
     # Tune the learning rate
@@ -124,7 +126,7 @@ is {best_hps.get('learning_rate')}.
 
 # Build the model with the optimal hyperparameters and train it on the data for 50 epochs
 model = tuner.hypermodel.build(best_hps)
-history = model.fit(train_data, y_train, epochs=50)
+history = model.fit(train_data, y_train, epochs=50, validation_data=(val_data, y_val))
 
 val_acc_per_epoch = history.history['val_loss']
 best_epoch = val_acc_per_epoch.index(max(val_acc_per_epoch)) + 1
