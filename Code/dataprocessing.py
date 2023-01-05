@@ -102,10 +102,21 @@ def load_general_data_lstm(trains_subjects, holdout_subject, sensor='both', dlh=
     Description: Load the data for the general case where the subject is the test data
     '''
 
+    train_data = []
+    train_target = []
     for tsubject in trains_subjects:
-        
+
+        temp_train_data, temp_train_target = create_featured_dataset(tsubject, sensor=sensor, dlh=dlh, keep_SH=keep_SH, keep_event=keep_event)
+
+        train_data.append(temp_train_data)
+        train_target.append(temp_train_target)
+
+    train_data = np.array(train_data)
+    train_target = np.array(train_target)
+    holdout_data, holdout_target = create_featured_dataset(holdout_subject, sensor=sensor, dlh=dlh, keep_SH=keep_SH, keep_event=keep_event)
 
     return train_data, train_target, holdout_data, holdout_target
+
 def create_sequences(values, time_steps=24):
     output = []
     for i in range(len(values) - time_steps + 1):
