@@ -137,6 +137,7 @@ train_weights = class_weight.compute_class_weight(class_weight='balanced',
 
 # Reformat for tensorflow
 train_weights = {i: weight for i, weight in enumerate(train_weights)}
+train_weights = {0: 0.01, 1: 100000}
 
 # Reshape data to be read by RNN models
 #train_data_stacked = np.concatenate((X_train_scaled, y_train), axis = 1) #tf.stack([X_train_scaled, y_train])
@@ -236,15 +237,15 @@ tf.keras.metrics.AUC(name='auc'),'''
 
 ### Compile the models
 
-rnn_cell_model.compile(loss=tf.keras.losses.BinaryCrossentropy(), #tf.keras.losses.BinaryCrossentropy(from_logits=True),
+rnn_cell_model.compile(loss='mean_squared_error', #tf.keras.losses.BinaryCrossentropy(from_logits=True),
             optimizer=tf.keras.optimizers.Adam(),
             metrics=[tf.keras.metrics.AUC(name='prc', curve='PR') ])
 
-simpleRNN_model.compile(loss=tf.keras.losses.BinaryCrossentropy(), #tf.keras.losses.BinaryCrossentropy(from_logits=True),
+simpleRNN_model.compile(loss='mean_squared_error', #tf.keras.losses.BinaryCrossentropy(from_logits=True),
             optimizer=tf.keras.optimizers.Adam(),
             metrics=[tf.keras.metrics.AUC(name='prc', curve='PR') ])
 
-lstm_model.compile(loss=tf.keras.losses.BinaryCrossentropy(), #tf.keras.losses.BinaryCrossentropy(from_logits=True),
+lstm_model.compile(loss='mean_squared_error', #tf.keras.losses.BinaryCrossentropy(from_logits=True),
             optimizer=tf.keras.optimizers.Adam(),
             metrics=[tf.keras.metrics.AUC(name='prc', curve='PR') ])
 
