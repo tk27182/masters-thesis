@@ -11,7 +11,7 @@ import pandas as pd
 import tensorflow as tf
 pd.options.mode.chained_assignment = None
 
-def create_featured_dataset(subject, sensor='both', dlh=0, keep_SH=True, keep_target=True):
+def create_featured_dataset(subject, sensor='both', dlh=0, keep_SH=True, keep_event=True):
 
     df = pd.read_pickle(f'/Users/kirsh012/Box/CGMS/{subject}/time_series/chunked_firsteventdata_12_hours_locf.pkl')
 
@@ -21,8 +21,19 @@ def create_featured_dataset(subject, sensor='both', dlh=0, keep_SH=True, keep_ta
     print("After dropping rows with NaN in the SH_Event columns, the shape is: ", df.shape)
     print("NaN values in this dataset: ", df.isna().any().any())
 
-    left_df = df.filter(regex = '^t(.*?)_l$')
-    right_df = df.filter(regex = '^t(.*?)_r$')
+    if keep_SH:
+        left_df = df.filter(regex = '_l$')#df.filter(regex = '^t(.*?)_l$')
+        right_df = df.filter(regex = '_r$')#df.filter(regex = '^t(.*?)_r$')
+
+        target = pd.concat([left_df['SH_Event_l'], right_df['SH_Event_r']], axis = 1).values #np.concatenate((left_df['SH_Event_l'].values, right_df['SH_Event_r'].values), axis = 1)
+        #keep_left_df.loc[:, 'SH_Event_l'] = left_df.loc[:, 'SH_Event_l']
+        #keep_right_df.loc[:, 'SH_Event_r'] = right_df.loc[:,'SH_Event_r']
+        left_df.drop('SH_Event_l', axis = 1, inplace=True)
+        right_df.drop('SH_Event_r', axis = 1, inplace = True)
+    else:
+        left_df = df.filter(regex = '^t(.*?)_l$')
+        right_df = df.filter(regex = '^t(.*?)_r$')
+
     print("The left data frame set shape is: ", left_df.shape)
     print("The right data frame set shape is: ", right_df.shape)
 
@@ -40,14 +51,7 @@ def create_featured_dataset(subject, sensor='both', dlh=0, keep_SH=True, keep_ta
     print("The keep left data frame set shape is: ", keep_left_df.shape)
     print("The keep right data frame set shape is: ", keep_right_df.shape)
 
-    if keep_SH:
-        target = np.concatenate((left_df['SH_Event_l'].values, right_df['SH_Event_r'].values), axis = 1)
-        #keep_left_df.loc[:, 'SH_Event_l'] = left_df.loc[:, 'SH_Event_l']
-        #keep_right_df.loc[:, 'SH_Event_r'] = right_df.loc[:,'SH_Event_r']
-        #left_df.drop('SH_Event_l', axis = 1, inplace=True)
-        #right_df.drop('SH_Event_r', axis = 1, inplace = True)
-
-    if keep_target:
+    if keep_event:
         target = df['event'].astype(int).values #np.reshape(df['event'].values, (df.shape[0], 1, 1)).astype(int)
 
     print(keep_left_df.columns)
@@ -92,6 +96,16 @@ def load_data_nn(subject, sensor='both', dlh=0, keep_SH=False, return_target=Tru
     target = df['event'].values
 
     return data, varnames, target
+
+def load_general_data_lstm(trains_subjects, holdout_subject, sensor='both', dlh=0, keep_SH=False, keep_event=True):
+    '''
+    Description: Load the data for the general case where the subject is the test data
+    '''
+
+    for tsubject in trains_subjects:
+        
+
+    return train_data, train_target, holdout_data, holdout_target
 def create_sequences(values, time_steps=24):
     output = []
     for i in range(len(values) - time_steps + 1):
