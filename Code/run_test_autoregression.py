@@ -145,14 +145,29 @@ val_preds   = results.forecast(val_data.values[-lag_order:], steps = 24)
 test_preds  = results.forecast(test_data.values[-lag_order:], steps = 24)
 
 # Add padding to the predictions (Needs work)
-#train_preds = np.concatenate((np.array([np.nan]*N_tr).reshape(-1,1), train_preds))
-#val_preds   = np.concatenate((np.array([np.nan]*N_vl).reshape(-1,1), val_preds))
-# test_preds  = np.concatenate((np.array([np.nan]*N_te).reshape(-1,1), test_preds))
+x_train = np.arange(0, N_tr/4, 1/4)
+x_val   = np.arange(0, N_vl/4, 1/4)
+x_test  = np.arange(0, N_te/4, 1/4)
+
+pad_train = np.empty((N_tr,2,))
+pad_val   = np.empty((N_vl,2,))
+pad_test = np.empty((N_te,2,))
+pad_train[:] = np.nan
+pad_val[:]   = np.nan
+pad_test[:]  = np.nan
+
+print(pad_train.shape)
+print(train_preds.shape)
+pad_train_preds = np.vstack((pad_train, train_preds))
+pad_val_preds   = np.vstack((pad_val, val_preds))
+pad_test_preds  = np.vstack((pad_test, test_preds))
+
 
 ### Plot predictions vs results
 fig, axes = plt.subplots(nrows=3)
 
-axes[0].plot(train_data, label = 'Real Train Data', color = 'k')
+#axes[0].plot(, label = 'Left Real Train Data', color = 'k', linestyle = '--')
+axes[0].plot(train_data, label = 'Real Train Data', color = 'k', linestyle = ':')
 axes[0].plot(train_preds, label = 'Predicted Train Data', color = 'r', linestyle='--')
 
 axes[1].plot(val_data, label = 'Real Validation Data', color = 'k')
