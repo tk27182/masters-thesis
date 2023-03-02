@@ -38,6 +38,27 @@ class History_save_model(object):
         self.epoch = epoch
         self.params = params
 
+class StopEarlyAUPRC(Callback):
+    '''
+    Used to determine optimal number of epochs that maximizes AU-PRC
+    '''
+    def __init__(self, name = 'prc', thresh = 0.95, print_msg=True):
+        self.auprc_name = name
+        self.auprc_thresh = thresh
+        self.print_msg = print_msg
+
+    def on_epoch_end(self, epoch, logs={}):
+
+        # Check AU-PRC vs epoch
+        if self.auprc_name in logs:
+            if logs.get(self.auprc_name) > self.auprc_thresh:
+                if self.print_msg:
+                    print(f"\nReached AU-PRC of {self.auprc_thresh}. Training is stopping.\n")
+                self.model.stop_training = True
+            else:
+                if self.print_msg:
+                    print("\nTarget AU-PRC has not been reached. Running another epoch...\n")
+
 class myCallback(Callback):
 
     '''
@@ -187,8 +208,6 @@ class LSTMAutoEncoder(Model):
                                 tf.keras.layers.Dense(self.input_dim)
         ))
 
-        #self.decoder.add(tf.keras.layers.Activation('linear'))
-
     def call(self, x):
         encoded = self.encoder(x)
         decoded = self.decoder(encoded)
@@ -214,57 +233,115 @@ class AnomalyDetector(Model):
     encoded = self.encoder(x)
     decoded = self.decoder(encoded)
     return decoded
-    
-def build_lstm_model(lstm_nodes, num_features):
+
+def build_lstm_model(lstm_nodes, num_features, binary = True):
     model = tf.keras.models.Sequential()
 
     # Shape [batch, time, features] => [batch, time, lstm_units]
-    model.add(tf.keras.layers.LSTM(lstm_nodes, return_sequences=True))
-    model.add(tf.keras.layers.LSTM(lstm_nodes/2, return_sequences=False))
+    #model.add(tf.keras.layers.LSTM(lstm_nodes, return_sequences=True))
+    #model.add(tf.keras.layers.LSTM(int(lstm_nodes/2), return_sequences=False))
+    model.add(tf.keras.layers.LSTM(190, return_sequences=True))
+    model.add(tf.keras.layers.LSTM(40, return_sequences=True))
+    model.add(tf.keras.layers.LSTM(8, return_sequences=False))
     # Shape => [batch, time, features]
-    model.add(tf.keras.layers.Dense(units=num_features, activation = 'softmax', name = 'predictions'))
+    if binary:
+        model.add(tf.keras.layers.Dense(units=1, activation = 'sigmoid', name = 'predictions'))
+    else:
+        model.add(tf.keras.layers.Dense(units=num_features, activation = 'softmax', name = 'predictions'))
     return model
 
-def build_bidirectional_lstm_model(lstm_nodes, num_features):
+def build_bidirectional_lstm_model(lstm_nodes, num_features, binary=True):
 
     model = tf.keras.models.Sequential()
 
     # Shape [batch, time, features] => [batch, time, lstm_units]
     model.add(tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(lstm_nodes, return_sequences=True)))
-    model.add(tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(lstm_nodes/2, return_sequences=False)))
+    model.add(tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(int(lstm_nodes/2), return_sequences=False)))
     # Shape => [batch, time, features]
-    model.add(tf.keras.layers.Dense(units=num_features, activation = 'softmax', name = 'predictions'))
+    if binary:
+        model.add(tf.keras.layers.Dense(units=1, activation = 'sigmoid', name = 'predictions'))
+    else:
+        model.add(tf.keras.layers.Dense(units=num_features, activation = 'softmax', name = 'predictions'))
     return model
 
-def build_simplernn_model(rnn_nodes, num_features):
+def build_simplernn_model(rnn_nodes, num_features, binary=True):
 
     model = tf.keras.models.Sequential()
     # Shape [batch, time, features] => [batch, time, lstm_units]
     model.add(tf.keras.layers.SimpleRNN(rnn_nodes))
     # Shape => [batch, time, features]
-    model.add(tf.keras.layers.Dense(units=num_features, activation = 'softmax', name = 'predictions'))
+    if binary:
+        model.add(tf.keras.layers.Dense(units=1, activation = 'sigmoid', name = 'predictions'))
+    else:
+        model.add(tf.keras.layers.Dense(units=num_features, activation = 'softmax', name = 'predictions'))
     return model
 
-def build_bidirectional_simplernn_model(rnn_nodes, num_features):
+def build_bidirectional_simplernn_model(rnn_nodes, num_features, binary = True):
 
     model = tf.keras.models.Sequential()
     # Shape [batch, time, features] => [batch, time, lstm_units]
     model.add(tf.keras.layers.Bidirectional(tf.keras.layers.SimpleRNN(rnn_nodes)))
     # Shape => [batch, time, features]
-    model.add(tf.keras.layers.Dense(units=num_features, activation = 'softmax', name = 'predictions'))
+    if binary:
+        model.add(tf.keras.layers.Dense(units=1, activation = 'sigmoid', name = 'predictions'))
+    else:
+        model.add(tf.keras.layers.Dense(units=num_features, activation = 'softmax', name = 'predictions'))
     return model
 
-def build_rnn_cell_model(rnn_nodes, num_features):
+def build_rnn_cell_model(rnn_nodes, num_features, binary=True):
 
     cell = MinimalRNNCell(rnn_nodes)
 
     model = tf.keras.models.Sequential()
 
     model.add(tf.keras.layers.RNN(cell))
-    model.add(tf.keras.layers.Dense(units=num_features, activation= 'softmax', name = 'predictions'))
+    if binary:
+        model.add(tf.keras.layers.Dense(units=1, activation = 'sigmoid', name = 'predictions'))
+    else:
+        model.add(tf.keras.layers.Dense(units=num_features, activation= 'softmax', name = 'predictions'))
     return model
 
-def hypertune_lstm(hp):
+def hypertune_simpleRNN(hp, loss, num_features=2, binary=True):
+    model = tf.keras.models.Sequential()
+    # Tune the number of hidden layers
+    #for i in range(hp.Int("hidden_layers", min_value=1, max_value=5, step=1)):
+    for i in range(hp.Int("hidden_layers", min_value=0, max_value=5, step=1)):
+        # Tune the number of nodes in the hidden layers
+        # Choose an optimal value between 10 and 80
+        hp_units = hp.Int(f'units-{i}', min_value=10, max_value=256, step=5)
+        model.add(tf.keras.layers.SimpleRNN(units=hp_units, return_sequences=True,
+                                        name = f'rnn-layer-{i}'))
+        # Add dropout layer
+        hp_dropout_frac = hp.Float(f'dropout-{i}', min_value=0, max_value=0.5, step=0.05)
+        model.add(tf.keras.layers.Dropout(hp_dropout_frac))
+
+    # Output layer
+    final_hp_units = hp.Int(f'final_rnn_layer', min_value=10, max_value=256, step=5)
+    model.add(tf.keras.layers.SimpleRNN(units=final_hp_units, return_sequences=False,
+                                    name = f'final_rnn_layer'))
+    final_dropout = hp.Float('final_dropout', min_value = 0, max_value=0.5, step=0.05)
+    model.add(tf.keras.layers.Dropout(final_dropout))
+
+    if binary:
+        model.add(tf.keras.layers.Dense(units=1, activation = 'sigmoid', name = 'predictions'))
+    else:
+        model.add(tf.keras.layers.Dense(num_features, activation='softmax', name = 'predictions'))
+
+    # Tune the learning rate
+    hp_learning_rate = hp.Choice('learning_rate', values=[1e-4, 5e-4, 1e-3, 2e-3, 5e-3])
+
+    model.compile(optimizer=keras.optimizers.Adam(learning_rate=hp_learning_rate), \
+                    loss = loss,
+                    metrics = [
+                    keras.metrics.BinaryAccuracy(name='accuracy'),
+                    keras.metrics.Precision(name='precision'),
+                    keras.metrics.Recall(name='recall'),
+                    keras.metrics.AUC(name='auc'),
+                    keras.metrics.AUC(name='prc', curve='PR') ]
+                    )
+    return model
+
+def hypertune_lstm(hp, loss, num_features=2, binary=True):
     model = tf.keras.models.Sequential()
     # Tune the number of hidden layers
     #for i in range(hp.Int("hidden_layers", min_value=1, max_value=5, step=1)):
@@ -274,16 +351,56 @@ def hypertune_lstm(hp):
         hp_units = hp.Int(f'units-{i}', min_value=10, max_value=256, step=5)
         model.add(tf.keras.layers.LSTM(units=hp_units, return_sequences=True,
                                         name = f'LSTM-layer-{i}'))
+        # Add dropout layer
+        hp_dropout_frac = hp.Float(f'dropout-{i}', min_value=0, max_value=0.5, step=0.05)
+        model.add(tf.keras.layers.Dropout(hp_dropout_frac))
 
     # Output layer
-    model.add(tf.keras.layers.LSTM(8, return_sequences=False, name = 'final-LSTM-layer'))
-    model.add(tf.keras.layers.Dense(2, activation='softmax', name = 'predictions'))
+    #model.add(tf.keras.layers.LSTM(8, return_sequences=False, name = 'final-LSTM-layer'))
+    if binary:
+        model.add(tf.keras.layers.Dense(units=1, activation = 'sigmoid', name = 'predictions'))
+    else:
+        model.add(tf.keras.layers.Dense(num_features, activation='softmax', name = 'predictions'))
 
     # Tune the learning rate
     hp_learning_rate = hp.Choice('learning_rate', values=[1e-4, 5e-4, 1e-3, 2e-3, 5e-3])
 
     model.compile(optimizer=keras.optimizers.Adam(learning_rate=hp_learning_rate), \
-                    loss = keras.losses.BinaryCrossentropy(),
+                    loss = loss,
+                    metrics = [
+                    keras.metrics.BinaryAccuracy(name='accuracy'),
+                    keras.metrics.Precision(name='precision'),
+                    keras.metrics.Recall(name='recall'),
+                    keras.metrics.AUC(name='auc'),
+                    keras.metrics.AUC(name='prc', curve='PR') ]
+                    )
+    return model
+
+def hypertune_bidirectional_lstm(hp, loss, num_features=2, binary=True):
+    model = tf.keras.models.Sequential()
+    # Tune the number of hidden layers
+    #for i in range(hp.Int("hidden_layers", min_value=1, max_value=5, step=1)):
+    for i in range(hp.Int("hidden_layers", min_value=0, max_value=5, step=1)):
+        # Tune the number of nodes in the hidden layers
+        # Choose an optimal value between 10 and 80
+        hp_units = hp.Int(f'units-{i}', min_value=10, max_value=256, step=5)
+        model.add(tf.keras.layers.Bidirectional(
+                    tf.keras.layers.LSTM(units=hp_units, return_sequences=True,
+                                        name = f'LSTM-layer-{i}')))
+
+    # Output layer
+    #model.add(tf.keras.layers.Bidirectional(
+    #            tf.keras.layers.LSTM(8, return_sequences=False, name = 'final-LSTM-layer')))
+    if binary:
+        model.add(tf.keras.layers.Dense(units=1, activation = 'sigmoid', name = 'predictions'))
+    else:
+        model.add(tf.keras.layers.Dense(num_features, activation='softmax', name = 'predictions'))
+
+    # Tune the learning rate
+    hp_learning_rate = hp.Choice('learning_rate', values=[1e-4, 5e-4, 1e-3, 2e-3, 5e-3])
+
+    model.compile(optimizer=keras.optimizers.Adam(learning_rate=hp_learning_rate), \
+                    loss = loss,
                     metrics = [
                     keras.metrics.BinaryAccuracy(name='accuracy'),
                     keras.metrics.Precision(name='precision'),
@@ -297,7 +414,7 @@ def hypertune_autoencoder(hp):
 
     lstm_dim = hp.Int("units", min_value = 32, max_value=256, step = 16)
 
-    autoencoder = nnm.LSTMAutoEncoder(timesteps, input_dim, lstm_dim) #, timesteps) #nnm.AnomalyDetector(data.shape[1])
+    autoencoder = LSTMAutoEncoder(24, 2, lstm_dim) #, timesteps) #nnm.AnomalyDetector(data.shape[1])
 
     # Tune the learning rate
     hp_learning_rate = hp.Choice('learning_rate', values=[1e-4, 5e-4, 1e-3, 2e-3, 5e-3])
@@ -313,7 +430,7 @@ def hypertune_deep_autoencoder(hp):
     lstm_dim = hp.Int("units", min_value = 60, max_value = 640, step = 5)
     num_layers = hp.Int("layers", min_value = 2, max_value = 6, step = 1)
 
-    autoencoder = nnm.DeepLSTMAutoEncoder(timesteps, input_dim, code_dim, lstm_dim, num_layers)
+    autoencoder = DeepLSTMAutoEncoder(24, 2, code_dim, lstm_dim, num_layers)
 
     # Tune the learning rate
     hp_learning_rate = hp.Choice('learning_rate', values=[1e-3, 5e-3])
@@ -322,6 +439,12 @@ def hypertune_deep_autoencoder(hp):
                         loss='mean_squared_error')
 
     return autoencoder
+
+def hypertune_lstm_autoencoder(hp, timesteps, input_dim):
+
+    lstm_dim = hp.Int("units", min_value = 10, max_value = 256, step = 2)
+
+    autoencoder = LSTMAutoEncoder(timesteps, input_dim, lstm_dim)
 
 def min_max_data(train_data, test_data, val_data):
 
@@ -447,11 +570,16 @@ def build_test_ann(x_train, input_shape, num_hidden_nodes=10, classes = 2):
             #tf.keras.layers.Dropout(0.2),
             tf.keras.layers.Dense(64, activation = 'relu', name = 'hidden-layer-2'),
             # Hidden layer
-            tf.keras.layers.Dense(num_hidden_nodes, activation = 'relu', name = 'hidden-layer-3'),
-            # Output layer
-            tf.keras.layers.Dense(classes, activation = 'softmax', name = 'predictions'),
+            tf.keras.layers.Dense(num_hidden_nodes, activation = 'relu', name = 'hidden-layer-3')
+            
         ]
     )
+
+    if classes==2:
+        model.add(tf.keras.layers.Dense(units=1, activation = 'sigmoid', name = 'predictions'))
+    else:
+        # Output layer
+        model.add(tf.keras.layers.Dense(classes, activation = 'softmax', name = 'predictions'))
 
     return model
 
@@ -500,7 +628,7 @@ def hypertune_ann(hp):
 
         # Tune the number of nodes in the hidden layers
         # Choose an optimal value between 10 and 80
-        hp_units = hp.Int(f'units-{i}', min_value=10, max_value=80, step=2)
+        hp_units = hp.Int(f'units-{i}', min_value=5, max_value=80, step=2)
         model.add(keras.layers.Dense(units=hp_units, activation = 'relu'))
 
     # Output layer
@@ -510,7 +638,44 @@ def hypertune_ann(hp):
     hp_learning_rate = hp.Choice('learning_rate', values=[1e-4, 5e-4, 1e-3, 2e-3, 5e-3])
 
     model.compile(optimizer=keras.optimizers.Adam(learning_rate=hp_learning_rate), \
-                    loss = keras.losses.BinaryCrossentropy(),
+                    loss = keras.losses.MeanSquaredError(),
+                    metrics = [keras.metrics.TruePositives(name='tp'),
+                    keras.metrics.FalsePositives(name='fp'),
+                    keras.metrics.TrueNegatives(name='tn'),
+                    keras.metrics.FalseNegatives(name='fn'),
+                    keras.metrics.BinaryAccuracy(name='accuracy'),
+                    keras.metrics.Precision(name='precision'),
+                    keras.metrics.Recall(name='recall'),
+                    keras.metrics.AUC(name='auc'),
+                    keras.metrics.AUC(name='prc', curve='PR') ]
+                    )
+
+    return model
+
+def hypertune_ann_dropout(hp):
+
+    model = keras.Sequential()
+    #model.add(keras.layers.Input())
+    # Tune the number of hidden layers
+    for i in range(hp.Int("hidden_layers", min_value=1, max_value=5, step=1)):
+
+        # Tune the number of nodes in the hidden layers
+        # Choose an optimal value between 10 and 80
+        hp_units = hp.Int(f'units-{i}', min_value=5, max_value=80, step=2)
+        model.add(keras.layers.Dense(units=hp_units, activation = 'relu'))
+
+        # Add dropout layer
+        hp_dropout_frac = hp.Float(f'dropout-{i}', min_value=0, max_value=0.5, step=0.05)
+        model.add(tf.keras.layers.Dropout(hp_dropout_frac))
+
+    # Output layer
+    model.add(keras.layers.Dense(2, activation='softmax'))
+
+    # Tune the learning rate
+    hp_learning_rate = hp.Choice('learning_rate', values=[1e-4, 5e-4, 1e-3, 2e-3, 5e-3])
+
+    model.compile(optimizer=keras.optimizers.Adam(learning_rate=hp_learning_rate), \
+                    loss = keras.losses.MeanSquaredError(),
                     metrics = [keras.metrics.TruePositives(name='tp'),
                     keras.metrics.FalsePositives(name='fp'),
                     keras.metrics.TrueNegatives(name='tn'),
