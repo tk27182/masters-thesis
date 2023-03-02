@@ -11,8 +11,10 @@ import pandas as pd
 import tensorflow as tf
 pd.options.mode.chained_assignment = None
 
-def create_featured_dataset(subject, sensor='both', dlh=0, keep_SH=True, keep_event=True):
 
+def load_data_left_right(subject, sensor='both', dlh=0, keep_SH=False, keep_event=True):
+
+    # Load the chunked dataset
     df = pd.read_pickle(f'/Users/kirsh012/Box/CGMS/{subject}/time_series/chunked_firsteventdata_12_hours_locf.pkl')
 
     # Drop rows with NaN in SH_events
@@ -25,7 +27,15 @@ def create_featured_dataset(subject, sensor='both', dlh=0, keep_SH=True, keep_ev
         left_df = df.filter(regex = '_l$')#df.filter(regex = '^t(.*?)_l$')
         right_df = df.filter(regex = '_r$')#df.filter(regex = '^t(.*?)_r$')
 
-        target = pd.concat([left_df['SH_Event_l'], right_df['SH_Event_r']], axis = 1).values #np.concatenate((left_df['SH_Event_l'].values, right_df['SH_Event_r'].values), axis = 1)
+        if sensor == 'both':
+            target = pd.concat([left_df['SH_Event_l'], right_df['SH_Event_r']], axis = 1) #np.concatenate((left_df['SH_Event_l'].values, right_df['SH_Event_r'].values), axis = 1)
+        elif sensor == 'left':
+            target = left_df['SH_Event_l'].values
+        elif sensor == 'right':
+            target = right_df['SH_Event_r'].values
+        else:
+            raise ValueError(f"{sensor} is not a valid sensor input.")
+
         #keep_left_df.loc[:, 'SH_Event_l'] = left_df.loc[:, 'SH_Event_l']
         #keep_right_df.loc[:, 'SH_Event_r'] = right_df.loc[:,'SH_Event_r']
         left_df.drop('SH_Event_l', axis = 1, inplace=True)
@@ -53,6 +63,20 @@ def create_featured_dataset(subject, sensor='both', dlh=0, keep_SH=True, keep_ev
 
     if keep_event:
         target = df['event'].astype(int).values #np.reshape(df['event'].values, (df.shape[0], 1, 1)).astype(int)
+
+    # Return based on which sensors to use for analysis
+    if sensor == 'both':
+        return keep_left_df, keep_right_df, target
+    elif sensor == 'left':
+        return keep_left_df, target
+    elif sensor == 'right':
+        return keep_right_df, target 
+    else:
+        raise ValueError(f"{sensor} is not a valid sensor type!")
+
+def create_featured_dataset(subject, sensor='both', dlh=0, keep_SH=True, keep_event=True):
+
+    keep_left_df, keep_right_df, target = load_data_left_right(subject, sensor=sensor, dlh=dlh, keep_SH=keep_SH, keep_event=keep_event)
 
     print(keep_left_df.columns)
     print(keep_right_df.columns)
@@ -90,7 +114,7 @@ def load_data_nn(subject, sensor='both', dlh=0, keep_SH=False, return_target=Tru
     print("The keep left data frame set shape is: ", keep_left_df.shape)
     print("The keep right data frame set shape is: ", keep_right_df.shape)
 
-    use_data = pd.concat([keep_left_df, keep_right_df], axis = 1, sort = False, ignore_index=True)
+    use_data = pd.concat([keep_left_df, keep_right_df], axis = 1)
     data = use_data.values
     varnames = use_data.columns.tolist()
     target = df['event'].values
@@ -116,6 +140,16 @@ def load_general_data_lstm(trains_subjects, holdout_subject, sensor='both', dlh=
     holdout_data, holdout_target = create_featured_dataset(holdout_subject, sensor=sensor, dlh=dlh, keep_SH=keep_SH, keep_event=keep_event)
 
     return train_data, train_target, holdout_data, holdout_target
+
+def get_original_time_series(data):
+
+    time_series = np.concatenate((data[:,0], data[-1, 1:]))
+    return time_series
+
+def make_windowed_data(time_series, n):
+    from scipy.linalg import toeplitz
+    windowed_data = np.fliplr(toeplitz(time_series[n:], time_series[n::-1]))
+    return windowed_data
 
 def create_sequences(values, time_steps=24):
     output = []
