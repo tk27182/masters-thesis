@@ -168,13 +168,13 @@ fig, axes = plt.subplots(nrows=3)
 
 #axes[0].plot(, label = 'Left Real Train Data', color = 'k', linestyle = '--')
 axes[0].plot(train_data, label = 'Real Train Data', color = 'k', linestyle = ':')
-axes[0].plot(train_preds, label = 'Predicted Train Data', color = 'r', linestyle='--')
+axes[0].plot(pad_train_preds, label = 'Predicted Train Data', color = 'r', linestyle='--')
 
-axes[1].plot(val_data, label = 'Real Validation Data', color = 'k')
-axes[1].plot(val_preds, label = 'Predicted Validation Data', color = 'r', linestyle='--')
+axes[1].plot(val_data, label = 'Real Validation Data', color = 'k', linestyle = ':')
+axes[1].plot(pad_val_preds, label = 'Predicted Validation Data', color = 'r', linestyle='--')
 
-axes[2].plot(test_data, label = 'Real Test Data', color = 'k')
-axes[2].plot(test_preds, label = 'Predicted Test Data', color = 'r', linestyle='--')
+axes[2].plot(test_data, label = 'Real Test Data', color = 'k', linestyle = ':')
+axes[2].plot(pad_test_preds, label = 'Predicted Test Data', color = 'r', linestyle='--')
 
 ### Add more to compare the 24 val and train, and val and test
 
