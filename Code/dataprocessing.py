@@ -269,7 +269,7 @@ def split_data_cv_indx(data, target, test_size=0.2):
     tr_idx, ts_idx, vidx = np.split(idx, [int(len(idx)*train_size), int(len(idx)*(1.-test_size))])
 
     train_indx = np.arange(ts_idx[0])
-    test_indx  = np.arange(ts_idx[0], vidx[0])
-    val_indx   = np.arange(vidx[0], data.shape[0])
+    val_indx  = np.arange(ts_idx[0], vidx[0])
+    test_indx   = np.arange(vidx[0], data.shape[0])
 
-    return train_indx, test_indx, val_indx
+    return train_indx, val_indx, test_indx
