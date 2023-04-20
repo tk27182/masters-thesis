@@ -9,6 +9,8 @@ Description: This script takes in the the name of the data file to run the chose
 """
 
 import sys
+import time
+import resource
 from pathlib import Path
 
 import tensorflow as tf
@@ -45,6 +47,11 @@ event        = data_name[4] #bool(args[5])
 model_name        = args[3] #args[6]
 binary       = bool(args[4]) #bool(args[7])
 
+if len(data_name) == 6:
+    smote    = data_name[5]
+else:
+    smote    = None
+
 # Determine classification or regression
 if event == 'classification':
     event = True
@@ -66,7 +73,7 @@ else:
 ### Set variables
 TIME_STEPS=24
 MAX_EPOCHS=500
-BATCH_SIZE=1000
+BATCH_SIZE=64
 
 ### Create model dictionary
 model_dict = {'lstm':             nnm.HyperLSTM(loss=loss, num_features=num_features, binary=binary),
@@ -93,22 +100,22 @@ if ('lstm' in model_name) or ('rnn' in model_name):
     print("Inside the LSTM or RNN section!")
     # Classification
     if event:
-        data, target = dp.create_featured_dataset(subject, sensor=sensor, dlh=dlh, keep_SH=False, keep_event=event)
+        data, target = dp.create_featured_dataset(subject, sensor=sensor, dlh=dlh, keep_SH=False, keep_event=event, smote=smote)
     # Regression
     else:
-        data, target = dp.create_featured_dataset(subject, sensor=sensor, dlh=dlh, keep_SH=True, keep_event=event)
+        data, target = dp.create_featured_dataset(subject, sensor=sensor, dlh=dlh, keep_SH=True, keep_event=event, smote=smote)
 
 # ANN or Classical Machine Learning Algorithm
 else:
     print("Inside the ANN section!")
     # Classification
     if event:
-        data, varnames, target = dp.load_data_nn(subject, sensor=sensor, dlh=dlh, keep_SH=False, return_target=event)
+        data, varnames, target = dp.load_data_nn(subject, sensor=sensor, dlh=dlh, keep_SH=False, return_target=event, smote=smote)
         print("Shape of analytical dataset is: ", data.shape)
         print("The target is shaped: ", target.shape)
     # Regression
     else:
-        data, varnames, target = dp.load_data_nn(subject, sensor=sensor, dlh=dlh, keep_SH=False, return_target=event)
+        data, varnames, target = dp.load_data_nn(subject, sensor=sensor, dlh=dlh, keep_SH=False, return_target=event, smote=smote)
         print("Shape of analytical dataset is: ", data.shape)
         print("The target is shaped: ", target.shape)
 
@@ -116,42 +123,65 @@ else:
 
 ### Split the data into train, val, and testing
 target = np.where(target == 1, 1, 0)
+
 #target = np.array([np.where(target != 1, 1, 0),
 #                   np.where(target == 1, 1, 0)
 #                    ]).T
+
 # Split data into time oriented chunks
-train_idx, val_idx, test_idx = dp.split_data_cv_indx(data,target)
+if smote is None:
+    train_idx, val_idx, test_idx = dp.split_data_cv_indx(data,target)
+    train_data = data[train_idx]
+    y_train    = target[train_idx]#.reshape((-1,1))
 
-train_data = data[train_idx]
-y_train    = target[train_idx]#.reshape((-1,1))
+    val_data   = data[val_idx]
+    y_val      = target[val_idx]#.reshape((-1,1))
 
-val_data   = data[val_idx]
-y_val      = target[val_idx]#.reshape((-1,1))
+    test_data  = data[test_idx]
+    y_test     = target[test_idx]#.reshape((-1,1))
 
-test_data  = data[test_idx]
-y_test     = target[test_idx]#.reshape((-1,1))
+elif (smote == 'gauss') or (smote == 'smote'):
 
+    train_data, test_data, val_data, y_train, y_test, y_val = dp.train_test_val_split(data, target, test_size=0.2, val_size=0.25)
+
+else:
+    raise ValueError(f"SMOTE parameter is incorrect. Change this: {smote}")
+
+
+print("Data shapes:")
 print(train_data.shape)
 print(val_data.shape)
 print(test_data.shape)
+
+print("Target shapes:")
+print(y_train.shape)
+print(y_val.shape)
+print(y_test.shape)
+
+print("Postive values")
+print("Train: ", np.sum(y_train == 1))
+print("Val: ", np.sum(y_val == 1))
+print("Test: ", np.sum(y_test == 1))
 
 # Compute the class weights
 train_weights = class_weight.compute_class_weight(class_weight='balanced',
                                 classes=np.unique(y_train.ravel()), y=y_train.ravel())
 # Reformat for tensorflow
 train_weights = {i: weight for i, weight in enumerate(train_weights)}
+print("Train weights:", train_weights)
 
 ### Hypertune the Model ######################
 tuner = kt.Hyperband(mdl,
                      objective='val_loss',
                      max_epochs=MAX_EPOCHS,
                      factor=10,
-                     overwrite=False,
+                     overwrite=True,
                      directory=directory,
                      project_name=project_name)
 
 # Run the hypertuning search
-tuner.search(train_data, y_train, epochs=50, validation_data = (val_data, y_val), callbacks=[early_stopping], class_weight=train_weights)
+tuner.search(train_data, y_train, epochs=50, validation_data = (val_data, y_val), batch_size=BATCH_SIZE,
+            callbacks=[early_stopping], class_weight=train_weights)
 
 # Get the optimal hyperparameters
 best_hps=tuner.get_best_hyperparameters(num_trials=1)[0]
@@ -175,7 +205,8 @@ model = tuner.hypermodel.build(best_hps)
 
 #print("BEST MODEL SUMMARY: ")
 #print(model.summary())
-history = model.fit(train_data, y_train, epochs=50, validation_data=(val_data, y_val), class_weight=train_weights)
+history = model.fit(train_data, y_train, epochs=50, batch_size=BATCH_SIZE,
+                    validation_data=(val_data, y_val), class_weight=train_weights)
 print("BEST MODEL SUMMARY: ")
 print(model.summary())
 
@@ -195,18 +226,18 @@ eval_result = hypermodel.evaluate(test_data, y_test)
 print("[test loss, test accuracy]:", eval_result)
 
 # Save a plot of the model
-tf.keras.utils.plot_model(
-    hypermodel,
-    to_file=f"../Results/{directory}/test_model_{model_name}_hypertune/{model_name}_model_diagram.png",
-    show_shapes=False,
-    show_dtype=False,
-    show_layer_names=True,
-    rankdir='TB',
-    expand_nested=False,
-    dpi=96,
-    layer_range=None,
-    show_layer_activations=False
-)
+# tf.keras.utils.plot_model(
+#     hypermodel,
+#     to_file=f"../Results/{directory}/test_model_{model_name}_hypertune/{model_name}_model_diagram.png",
+#     show_shapes=False,
+#     show_dtype=False,
+#     show_layer_names=True,
+#     rankdir='TB',
+#     expand_nested=False,
+#     dpi=96,
+#     layer_range=None,
+#     show_layer_activations=False
+# )
 # Make predictions
 y_pred_test  = hypermodel.predict(test_data)
 y_pred_train = hypermodel.predict(train_data)

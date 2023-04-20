@@ -9,26 +9,76 @@ Created on Dec 3 2022 16:40:00
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+from imblearn.over_sampling import SMOTE
+from sklearn.model_selection import train_test_split
+
 pd.options.mode.chained_assignment = None
 
+def add_gaussian_noise(data, target):
 
-def load_data_left_right(subject, sensor='both', dlh=0, keep_SH=False, keep_event=True):
+    ### Generate more postive samples by adding Gaussian noise to them
+    pos_indx = np.where(target == 1)[0]
+    neg_indx = np.where(target != 1)[0]
+
+    N = len(neg_indx) - len(pos_indx)
+
+    print("Data shape: ", data.shape)
+    print("pos_indx: ", len(pos_indx))
+    print("N: ", N)
+    new_data   = []
+    new_target = []
+    for _ in range(N):
+        # Choose positive sample to simulate on
+        rdx = np.random.choice(pos_indx)
+
+        if isinstance(data, pd.DataFrame):
+            row = data.iloc[rdx,:]
+        else:
+            row = data[rdx, :]
+
+        # Create new Gaussian noise
+        new_row = row + np.random.randn(data.shape[1])
+
+        # Add new row and target
+        new_data.append(new_row)
+        new_target.append(1)
+
+    # Add the new rows
+    if isinstance(data, pd.DataFrame):
+        data = pd.concat([data, pd.DataFrame(new_data)], axis = 0)
+    else:
+        data = np.vstack((data, new_data))
+
+    target = np.append(target, new_target)
+
+    return data, target
+
+
+def augment_pos_labels(data, target):
+
+    # Apply some Gaussian noise to each row using SMOTE - oversample the minority class
+    sm = SMOTE(random_state=0)
+    data_sampled, target_sampled = sm.fit_resample(data, target)
+    return data_sampled, target_sampled
+
+
+def load_data_left_right(subject, sensor='both', dlh=0, keep_SH=False, keep_event=True, smote=None):
 
     # Load the chunked dataset
-    df = pd.read_pickle(f'/Users/kirsh012/Box/CGMS/{subject}/time_series/chunked_firsteventdata_12_hours_locf.pkl')
+    df = pd.read_pickle(f'~/Box/CGMS/{subject}/time_series/chunked_firsteventdata_12_hours_locf.pkl')
 
     # Drop rows with NaN in SH_events
     print("The beginning shape is: ", df.shape)
-    df.dropna(subset = ['SH_Event_l', 'SH_Event_r'], inplace = True)
+    df.dropna(inplace=True) #subset = ['SH_Event_l', 'SH_Event_r'], inplace = True)
     print("After dropping rows with NaN in the SH_Event columns, the shape is: ", df.shape)
     print("NaN values in this dataset: ", df.isna().any().any())
 
     if keep_SH:
-        left_df = df.filter(regex = '_l$')#df.filter(regex = '^t(.*?)_l$')
+        left_df  = df.filter(regex = '_l$')#df.filter(regex = '^t(.*?)_l$')
         right_df = df.filter(regex = '_r$')#df.filter(regex = '^t(.*?)_r$')
 
-        if sensor == 'both':
-            target = pd.concat([left_df['SH_Event_l'], right_df['SH_Event_r']], axis = 1) #np.concatenate((left_df['SH_Event_l'].values, right_df['SH_Event_r'].values), axis = 1)
+        if   sensor == 'both':
+            target = pd.concat([left_df['SH_Event_l'], right_df['SH_Event_r']], axis = 1).values #np.concatenate((left_df['SH_Event_l'].values, right_df['SH_Event_r'].values), axis = 1)
         elif sensor == 'left':
             target = left_df['SH_Event_l'].values
         elif sensor == 'right':
@@ -36,12 +86,10 @@ def load_data_left_right(subject, sensor='both', dlh=0, keep_SH=False, keep_even
         else:
             raise ValueError(f"{sensor} is not a valid sensor input.")
 
-        #keep_left_df.loc[:, 'SH_Event_l'] = left_df.loc[:, 'SH_Event_l']
-        #keep_right_df.loc[:, 'SH_Event_r'] = right_df.loc[:,'SH_Event_r']
         left_df.drop('SH_Event_l', axis = 1, inplace=True)
         right_df.drop('SH_Event_r', axis = 1, inplace = True)
     else:
-        left_df = df.filter(regex = '^t(.*?)_l$')
+        left_df  = df.filter(regex = '^t(.*?)_l$')
         right_df = df.filter(regex = '^t(.*?)_r$')
 
     print("The left data frame set shape is: ", left_df.shape)
@@ -64,19 +112,34 @@ def load_data_left_right(subject, sensor='both', dlh=0, keep_SH=False, keep_even
     if keep_event:
         target = df['event'].astype(int).values #np.reshape(df['event'].values, (df.shape[0], 1, 1)).astype(int)
 
-    # Return based on which sensors to use for analysis
-    if sensor == 'both':
-        return keep_left_df, keep_right_df, target
-    elif sensor == 'left':
-        return keep_left_df, target
-    elif sensor == 'right':
-        return keep_right_df, target 
+    ### Check if adding synthetic data
+    if smote == 'smote':
+        keep_left_df, ltarget  = augment_pos_labels(keep_left_df, df['event'].astype(int).values)
+        keep_right_df, rtarget = augment_pos_labels(keep_right_df, df['event'].astype(int).values)
+        target = ltarget
+    elif smote == 'gauss':
+        keep_left_df, ltarget  = add_gaussian_noise(keep_left_df, df['event'].astype(int).values)
+        keep_right_df, rtarget = add_gaussian_noise(keep_right_df, df['event'].astype(int).values)
+        print("GAUSSIAN FAKE DATA:")
+        print("Left data size = ", keep_left_df.shape)
+        print("Right data size = ", keep_right_df.shape)
+        target = ltarget
     else:
-        raise ValueError(f"{sensor} is not a valid sensor type!")
+        print("Not adding fake positive data samples.")
+    # Return based on which sensors to use for analysis
+    # if sensor == 'both':
+    #     return keep_left_df, keep_right_df, target
+    # elif sensor == 'left':
+    #     return keep_left_df, target
+    # elif sensor == 'right':
+    #     return keep_right_df, target
+    # else:
+    #     raise ValueError(f"{sensor} is not a valid sensor type!")
+    return keep_left_df, keep_right_df, target
 
-def create_featured_dataset(subject, sensor='both', dlh=0, keep_SH=True, keep_event=True):
+def create_featured_dataset(subject, sensor='both', dlh=0, keep_SH=True, keep_event=True, smote=None):
 
-    keep_left_df, keep_right_df, target = load_data_left_right(subject, sensor=sensor, dlh=dlh, keep_SH=keep_SH, keep_event=keep_event)
+    keep_left_df, keep_right_df, target = load_data_left_right(subject, sensor=sensor, dlh=dlh, keep_SH=keep_SH, keep_event=keep_event, smote=smote)
 
     print(keep_left_df.columns)
     print(keep_right_df.columns)
@@ -85,8 +148,27 @@ def create_featured_dataset(subject, sensor='both', dlh=0, keep_SH=True, keep_ev
     return data, target
 
 
-def load_data_nn(subject, sensor='both', dlh=0, keep_SH=False, return_target=True):
+def load_data_nn(subject, sensor='both', dlh=0, keep_SH=False, return_target=True, smote=None):
 
+    ldf, rdf, target = load_data_left_right(subject=subject, sensor=sensor, dlh=dlh, keep_SH=keep_SH, keep_event=return_target, smote=smote)
+
+
+    if sensor == 'both':
+        df = pd.concat([ldf, rdf], axis = 1)
+        varnames = df.columns
+        data = df.values
+    elif sensor == 'left':
+        data = ldf.values
+        varnames = ldf.columns
+    elif sensor == 'right':
+        data = rdf.values
+        varnames = rdf.columns
+    else:
+        raise ValueError(f'Invalid sensor provided {sensor}.')
+
+    return data, varnames, target
+
+    '''
     df = pd.read_pickle(f'/Users/kirsh012/Box/CGMS/{subject}/time_series/chunked_firsteventdata_12_hours_locf.pkl')
 
     # Drop rows with NaN in SH_events
@@ -108,20 +190,49 @@ def load_data_nn(subject, sensor='both', dlh=0, keep_SH=False, return_target=Tru
     drop_left_names = list(left_df.filter(regex = '^t').columns)[:hours] + list(left_df.filter(regex = '^t').columns)[end-h:]
     drop_right_names = list(right_df.filter(regex = '^t').columns)[:hours] + list(right_df.filter(regex = '^t').columns)[end-h:]
 
-    keep_left_df = left_df.drop(drop_left_names, axis = 1)
-    keep_right_df = right_df.drop(drop_right_names, axis = 1)
+    ### Choose which sensors to keep
+    if sensor=='both':
+        keep_left_df = left_df.drop(drop_left_names, axis = 1)
+        keep_right_df = right_df.drop(drop_right_names, axis = 1)
 
-    print("The keep left data frame set shape is: ", keep_left_df.shape)
-    print("The keep right data frame set shape is: ", keep_right_df.shape)
+        #print("The keep left data frame set shape is: ", keep_left_df.shape)
+        #print("The keep right data frame set shape is: ", keep_right_df.shape)
 
-    use_data = pd.concat([keep_left_df, keep_right_df], axis = 1)
-    data = use_data.values
-    varnames = use_data.columns.tolist()
-    target = df['event'].values
+        data = pd.concat([keep_left_df, keep_right_df], axis = 1)
 
-    return data, varnames, target
+        if not keep_SH:
+            data.drop(['SH_Event_l', 'SH_Event_r'], axis = 1, inplace = True)
 
-def load_general_data_lstm(trains_subjects, holdout_subject, sensor='both', dlh=0, keep_SH=False, keep_event=True):
+        print("The dataset shape after choosing BOTH sensors is :", data.shape)
+
+    elif sensor == 'left':
+        data = left_df.drop(drop_left_names, axis = 1)
+
+        if not keep_SH:
+            data.drop(['SH_Event_l'], axis = 1, inplace = True)
+
+        print("The dataset shape after choosing LEFT sensor is :", data.shape)
+
+    elif sensor == 'right':
+        data = left_df.drop(drop_left_names, axis = 1)
+
+        if not keep_SH:
+            data.drop(['SH_Event_r'], axis = 1, inplace = True)
+
+        print("The dataset shape after choosing RIGHT sensor is :", data.shape)
+
+    else:
+        raise ValueError(f"Sensor name {sensor} is invalid. Please fix.")
+
+    ### Keep the event for classification or not for regression (choose keep_SH)
+    if return_target:
+        target = df['event'].values
+        return data, target
+    else:
+        return data, False
+    '''
+
+def load_general_data_lstm(trains_subjects, holdout_subject, sensor='both', dlh=0, keep_SH=False, keep_event=True, smote=None):
     '''
     Description: Load the data for the general case where the subject is the test data
     '''
@@ -130,14 +241,14 @@ def load_general_data_lstm(trains_subjects, holdout_subject, sensor='both', dlh=
     train_target = []
     for tsubject in trains_subjects:
 
-        temp_train_data, temp_train_target = create_featured_dataset(tsubject, sensor=sensor, dlh=dlh, keep_SH=keep_SH, keep_event=keep_event)
+        temp_train_data, temp_train_target = create_featured_dataset(tsubject, sensor=sensor, dlh=dlh, keep_SH=keep_SH, keep_event=keep_event, smote=smote)
 
         train_data.append(temp_train_data)
         train_target.append(temp_train_target)
 
     train_data = np.array(train_data)
     train_target = np.array(train_target)
-    holdout_data, holdout_target = create_featured_dataset(holdout_subject, sensor=sensor, dlh=dlh, keep_SH=keep_SH, keep_event=keep_event)
+    holdout_data, holdout_target = create_featured_dataset(holdout_subject, sensor=sensor, dlh=dlh, keep_SH=keep_SH, keep_event=keep_event, smote=smote)
 
     return train_data, train_target, holdout_data, holdout_target
 
