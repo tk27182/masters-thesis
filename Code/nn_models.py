@@ -14,24 +14,30 @@ from matplotlib import pyplot
 
 import tensorflow as tf
 
-import keras
+from tensorflow import keras
 import keras_tuner as kt
 
-from keras import layers
-from keras.utils.np_utils import to_categorical
-from keras.preprocessing import sequence
-from keras.models import Sequential
-from keras.layers import Dense, Embedding, Dropout, LSTM, Activation, Input, Conv1D, UpSampling1D
-from keras.optimizers import Adam
-from keras.callbacks import EarlyStopping, Callback
-from keras.metrics import AUC, RootMeanSquaredError
-from tensorflow.keras.models import Model
+#from keras import layers
+#from keras.utils.np_utils import to_categorical
+#from keras.preprocessing import sequence
+#from keras.models import Sequential
+#from keras.layers import Dense, Embedding, Dropout, LSTM, Activation, Input, Conv1D, UpSampling1D
+#from keras.optimizers import Adam
+#from keras.callbacks import EarlyStopping, Callback
+#from keras.metrics import AUC, RootMeanSquaredError
+#from tensorflow.keras.models import Model
 
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelBinarizer, LabelEncoder
 from sklearn.metrics import r2_score, auc, roc_curve, roc_auc_score, log_loss
 
+################################################################################################################################
+#### Baseline Models: To compare Neural Networks to ####
+def build_rf():
+    return
+def build_lr():
+    return
 ################################################################################################################################
 #### Hyper Classes: To pass arguments to the function models ####
 
@@ -60,9 +66,11 @@ class HyperANN(kt.HyperModel):
             hp_dropout_frac = hp.Float(f'dropout-{i}', min_value=0, max_value=0.5, step=0.05)
             model.add(tf.keras.layers.Dropout(hp_dropout_frac))
 
-        if self.binary:
-            model.add(tf.keras.layers.Dense(units=1, activation = 'sigmoid', name = 'predictions'))
+        if self.binary and (self.num_features == 1):
+            print("Binary and Number of Features is 1")
+            model.add(tf.keras.layers.Dense(units=1, activation = 'softmax', name = 'predictions'))
         elif self.binary and (self.num_features == 2):
+            print(f"Binary and Number of Features is {self.num_features}")
             model.add(tf.keras.layers.Dense(self.num_features, activation='softmax', name = 'predictions'))
         else:
             model.add(tf.keras.layers.Dense(self.num_features, activation='linear', name = 'predictions'))
@@ -73,14 +81,16 @@ class HyperANN(kt.HyperModel):
         model.compile(optimizer=keras.optimizers.Adam(learning_rate=hp_learning_rate), \
                         loss = self.loss,
                         metrics = [
-                            keras.metrics.BinaryAccuracy(name='accuracy'),
-                            keras.metrics.Precision(name='precision'),
-                            keras.metrics.Recall(name='recall'),
-                            keras.metrics.AUC(name='auc'),
-                            keras.metrics.AUC(name='prc', curve='PR')
+                            tf.keras.metrics.BinaryAccuracy(name='accuracy'),
+                            tf.keras.metrics.Precision(name='precision'),
+                            tf.keras.metrics.Recall(name='recall'),
+                            tf.keras.metrics.AUC(name='auc'),
+                            tf.keras.metrics.AUC(name='prc', curve='PR')
                             ]
                         )
 
+        model.build(input_shape =(2535, 48))
+        print(model.summary())
         return model
 
 class HyperSimpleRNN(kt.HyperModel):
@@ -711,13 +721,14 @@ def hypertune_ann_dropout(hp):
         model.add(tf.keras.layers.Dropout(hp_dropout_frac))
 
     # Output layer
-    model.add(keras.layers.Dense(2, activation='softmax'))
+    model.add(keras.layers.Dense(1, activation='sigmoid'))
+    #model.add(keras.layers.Dense(2, activation='softmax'))
 
     # Tune the learning rate
     hp_learning_rate = hp.Choice('learning_rate', values=[1e-4, 5e-4, 1e-3, 2e-3, 5e-3])
 
     model.compile(optimizer=keras.optimizers.Adam(learning_rate=hp_learning_rate), \
-                    loss = keras.losses.MeanSquaredError(),
+                    loss = keras.losses.BinaryCrossentropy(),
                     metrics = [keras.metrics.TruePositives(name='tp'),
                     keras.metrics.FalsePositives(name='fp'),
                     keras.metrics.TrueNegatives(name='tn'),
