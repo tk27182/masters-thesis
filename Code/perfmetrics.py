@@ -28,7 +28,8 @@ class CollectResults:
 
     def load_results(self, data_name, model_name):
 
-        filename = Path(f"../Results/{data_name}/{model_name}_results/")
+        subj = data_name.split('_')[1]
+        filename = Path(f"../Results/{subj}_hypertuning_results/{data_name}/{model_name}_results/")
 
         try:
             pred_results = np.load(filename / "predictions.npz")
@@ -48,6 +49,12 @@ class CollectResults:
         train_preds, val_preds, test_preds = preds['train_preds'], preds['val_preds'], preds['test_preds']
         train_target, val_target, test_target = targets['train_target'], targets['val_target'], targets['test_target']
         resources, total_time = resz['rez'], resz['time']
+        
+        if isinstance(train_preds, np.ndarray):
+            if train_preds.shape[1] == 2:
+                train_preds = train_preds[:,1]
+                test_preds  = test_preds[:,1]
+                val_preds   = val_preds[:,1]
 
         # Compute the AU-ROC and AU-PRC
         if isinstance(train_preds, float) or isinstance(train_target, float):
@@ -76,12 +83,12 @@ class CollectResults:
         if isinstance(resources, float):
             resources = np.nan
         else:
-            resources = resources.tolist()/1024.0/1024.0
+            resources = resources.tolist()
 
         if isinstance(total_time, float):
             total_time = np.nan
         else:
-            total_time = total_time.tolist()/3600
+            total_time = total_time.tolist()
 
         # Store the results in the default dict
         self.results_dict['Data Name'].append(data_name)
