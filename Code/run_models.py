@@ -22,6 +22,9 @@ from sklearn.utils import class_weight
 import nn_models as nnm
 import dataprocessing as dp
 
+### Star the timer
+start_time = time.perf_counter()
+
 ### Check GPU running
 if tf.test.gpu_device_name():
     print('Default GPU Device: {}'.format(tf.test.gpu_device_name()))
@@ -73,7 +76,8 @@ else:
 ### Set variables
 TIME_STEPS=24
 MAX_EPOCHS=500
-BATCH_SIZE=64
+BATCH_SIZE=512
+overwrite=False
 
 ### Create model dictionary
 model_dict = {'lstm':             nnm.HyperLSTM(loss=loss, num_features=num_features, binary=binary),
@@ -171,55 +175,68 @@ train_weights = {i: weight for i, weight in enumerate(train_weights)}
 print("Train weights:", train_weights)
 
 ### Hypertune the Model ######################
-tuner = kt.Hyperband(mdl,
-                     objective='val_loss',
-                     max_epochs=MAX_EPOCHS,
-                     factor=10,
-                     overwrite=True,
-                     directory=directory,
-                     project_name=project_name)
+best_model_path = Path(f"../Results/{directory}/{project_name}/best_model_{model_name}_hypertune")
 
-# Run the hypertuning search
-tuner.search(train_data, y_train, epochs=50, validation_data = (val_data, y_val), batch_size=BATCH_SIZE,
-            callbacks=[early_stopping], class_weight=train_weights)
+if best_model_path.exists():
+    hypermodel = tf.saved_model.load(best_model_path)
+else:
 
-# Get the optimal hyperparameters
-best_hps=tuner.get_best_hyperparameters(num_trials=1)[0]
-print("The best hyperparameters are: ", best_hps.values)
+    tuner = kt.Hyperband(mdl,
+                        objective='val_loss',
+                        max_epochs=MAX_EPOCHS,
+                        factor=10,
+                        overwrite=overwrite,
+                        directory=directory,
+                        project_name=project_name)
 
-# Build the model with the optimal hyperparameters and train it on the data for 50 epochs
-model = tuner.hypermodel.build(best_hps)
+    # Run the hypertuning search
+    tuner.search(train_data, y_train, epochs=50, validation_data = (val_data, y_val), batch_size=BATCH_SIZE,
+                callbacks=[early_stopping], class_weight=train_weights)
 
-#tf.keras.utils.plot_model(
-#    model,
-#    to_file='lstm_autoencoder_model.png',
-#    show_shapes=False,
-#    show_dtype=False,
-#    show_layer_names=True,
-#    rankdir='TB',
-#    expand_nested=False,
-#    dpi=96,
-#    layer_range=None,
-#    show_layer_activations=False
-#)
+    # Get the optimal hyperparameters
+    best_hps=tuner.get_best_hyperparameters(num_trials=1)[0]
+    print("The best hyperparameters are: ", best_hps.values)
+    # Save the best model
+    tuner.get_best_models()[0].save(f"../Results/{directory}/best_model.h5")
 
-#print("BEST MODEL SUMMARY: ")
-#print(model.summary())
-history = model.fit(train_data, y_train, epochs=50, batch_size=BATCH_SIZE,
-                    validation_data=(val_data, y_val), class_weight=train_weights)
-print("BEST MODEL SUMMARY: ")
-print(model.summary())
+    # Build the model with the optimal hyperparameters and train it on the data for 50 epochs
+    model = tuner.hypermodel.build(best_hps)
 
-val_acc_per_epoch = history.history['val_loss']
-best_epoch = val_acc_per_epoch.index(max(val_acc_per_epoch)) + 1
-print('Best epoch: %d' % (best_epoch,))
+    #tf.keras.utils.plot_model(
+    #    model,
+    #    to_file='lstm_autoencoder_model.png',
+    #    show_shapes=False,
+    #    show_dtype=False,
+    #    show_layer_names=True,
+    #    rankdir='TB',
+    #    expand_nested=False,
+    #    dpi=96,
+    #    layer_range=None,
+    #    show_layer_activations=False
+    #)
 
-print(tuner.results_summary())
-# Re-instantiate hypermodel and train with optimal number of epochs
-hypermodel = tuner.hypermodel.build(best_hps)
+    #print("BEST MODEL SUMMARY: ")
+    #print(model.summary())
+    history = model.fit(train_data, y_train, epochs=50, batch_size=BATCH_SIZE,
+                        validation_data=(val_data, y_val), class_weight=train_weights)
+    print("BEST MODEL SUMMARY: ")
+    print(model.summary())
 
-# Retrain the model
-hypermodel.fit(train_data, y_train, epochs=best_epoch, validation_data=(val_data, y_val), class_weight=train_weights)
+    val_acc_per_epoch = history.history['val_loss']
+    best_epoch = val_acc_per_epoch.index(max(val_acc_per_epoch)) + 1
+    print('Best epoch: %d' % (best_epoch,))
+
+    print(tuner.results_summary())
+    # Re-instantiate hypermodel and train with optimal number of epochs
+    hypermodel = tuner.hypermodel.build(best_hps)
+    ### Stop hypertuning and save
+    hypermodel.save(best_model_path)
+
+    # Retrain the model using the best epoch
+    hypermodel.fit(train_data, y_train, epochs=best_epoch, batch_size=BATCH_SIZE,
+                        validation_data=(val_data, y_val), class_weight=train_weights)
+
+
 
 # Evaluate on the test data
 eval_result = hypermodel.evaluate(test_data, y_test)
@@ -244,9 +261,8 @@ y_pred_train = hypermodel.predict(train_data)
 y_pred_val   = hypermodel.predict(val_data)
 
 # Save the predictions
-hypermodel.save(f"../Results/{directory}/test_model_{model_name}_hypertune")
+filename = Path(f"../Results/{directory}/{'_'.join(data_name)}/{model_name}_results/")
 
-filename = Path(f"../Results/{'_'.join(data_name)}/{model_name}_results/")
 # Make the directory if it doesn't exist
 filename.mkdir(parents=True, exist_ok=True)
 
@@ -255,3 +271,8 @@ np.savez(filename / "predictions.npz", test_preds=y_pred_test, train_preds=y_pre
 
 # Save the targets
 np.savez(filename / "targets.npz", test_target=y_test, train_target=y_train, val_target=y_val)
+
+elapsed_time = (time.perf_counter() - start_time)
+rez=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024.0/1024.0
+
+np.savez(filename / "resource_metrics.npz", rez=rez, time=elapsed_time)
