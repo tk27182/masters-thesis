@@ -9,8 +9,10 @@ Description: This script takes in the the name of the data file to run the chose
 """
 
 import sys
+import shutil
 import time
 import resource
+import json
 from pathlib import Path
 
 import tensorflow as tf
@@ -77,7 +79,7 @@ else:
 TIME_STEPS=24
 MAX_EPOCHS=500
 BATCH_SIZE=512
-overwrite=False
+overwrite=True
 
 ### Create model dictionary
 model_dict = {'lstm':             nnm.HyperLSTM(loss=loss, num_features=num_features, binary=binary),
@@ -104,22 +106,22 @@ if ('lstm' in model_name) or ('rnn' in model_name):
     print("Inside the LSTM or RNN section!")
     # Classification
     if event:
-        data, target = dp.create_featured_dataset(subject, sensor=sensor, dlh=dlh, keep_SH=False, keep_event=event, smote=smote)
+        data, target = dp.create_featured_dataset(subject, sensor=sensor, dlh=dlh, keep_SH=False, keep_event=event, smote=None)
     # Regression
     else:
-        data, target = dp.create_featured_dataset(subject, sensor=sensor, dlh=dlh, keep_SH=True, keep_event=event, smote=smote)
+        data, target = dp.create_featured_dataset(subject, sensor=sensor, dlh=dlh, keep_SH=True, keep_event=event, smote=None)
 
 # ANN or Classical Machine Learning Algorithm
 else:
     print("Inside the ANN section!")
     # Classification
     if event:
-        data, varnames, target = dp.load_data_nn(subject, sensor=sensor, dlh=dlh, keep_SH=False, return_target=event, smote=smote)
+        data, varnames, target = dp.load_data_nn(subject, sensor=sensor, dlh=dlh, keep_SH=False, return_target=event, smote=None)
         print("Shape of analytical dataset is: ", data.shape)
         print("The target is shaped: ", target.shape)
     # Regression
     else:
-        data, varnames, target = dp.load_data_nn(subject, sensor=sensor, dlh=dlh, keep_SH=False, return_target=event, smote=smote)
+        data, varnames, target = dp.load_data_nn(subject, sensor=sensor, dlh=dlh, keep_SH=False, return_target=event, smote=None)
         print("Shape of analytical dataset is: ", data.shape)
         print("The target is shaped: ", target.shape)
 
@@ -132,9 +134,11 @@ target = np.where(target == 1, 1, 0)
 #                   np.where(target == 1, 1, 0)
 #                    ]).T
 
+train_idx, val_idx, test_idx = dp.split_data_cv_indx(data,target)
+
 # Split data into time oriented chunks
 if smote is None:
-    train_idx, val_idx, test_idx = dp.split_data_cv_indx(data,target)
+
     train_data = data[train_idx]
     y_train    = target[train_idx]#.reshape((-1,1))
 
@@ -144,9 +148,76 @@ if smote is None:
     test_data  = data[test_idx]
     y_test     = target[test_idx]#.reshape((-1,1))
 
-elif (smote == 'gauss') or (smote == 'smote'):
+elif smote == 'gauss':
 
-    train_data, test_data, val_data, y_train, y_test, y_val = dp.train_test_val_split(data, target, test_size=0.2, val_size=0.25)
+    y_train    = target[train_idx]#.reshape((-1,1))
+    y_val      = target[val_idx]#.reshape((-1,1))
+    y_test     = target[test_idx]#.reshape((-1,1))
+
+    if len(data.shape) > 2:
+        train_data = []
+        val_data = []
+        new_y_train = []
+        new_y_val = []
+        for f in range(data.shape[2]):
+            tfeature_data, ty_train = dp.add_gaussian_noise(data[train_idx, :, f], y_train)
+            vfeature_data, vy_val = dp.add_gaussian_noise(data[val_idx, :, f], y_val)
+
+            train_data.append(tfeature_data)
+            val_data.append(vfeature_data)
+
+            new_y_train.append(ty_train)
+            new_y_val.append(vy_val)
+
+        train_data = np.stack(train_data, axis = 2)
+        val_data   = np.stack(val_data, axis = 2)
+        y_train = ty_train #np.vstack(new_y_train)
+        y_val   = vy_val #np.vstack(new_y_val)
+
+    else:
+        train_data, y_train = dp.add_gaussian_noise(data[train_idx], y_train)
+        val_data, y_val     = dp.add_gaussian_noise(data[val_idx], y_val)
+
+    test_data  = data[test_idx]
+
+
+elif smote == 'smote':
+
+    y_train    = target[train_idx]#.reshape((-1,1))
+    y_val      = target[val_idx]#.reshape((-1,1))
+    y_test     = target[test_idx]#.reshape((-1,1))
+
+    if len(data.shape) > 2:
+
+        train_data = []
+        val_data = []
+        new_y_train = []
+        new_y_val = []
+        for f in range(data.shape[2]):
+            tfeature_data, ty_train = dp.augment_pos_labels(data[train_idx, :, f], y_train)
+            vfeature_data, vy_val   = dp.augment_pos_labels(data[val_idx, :, f], y_val)
+
+            train_data.append(tfeature_data)
+            val_data.append(vfeature_data)
+
+            new_y_train.append(ty_train)
+            new_y_val.append(vy_val)
+
+        train_data = np.stack(train_data, axis = 2)
+        val_data   = np.stack(val_data, axis = 2)
+
+        y_train = ty_train #np.hstack(new_y_train) #np.stack(new_y_train, axis = 0)
+        y_val   = vy_val #np.hstack(new_y_val) #np.stack(new_y_val, axis = 0)
+
+    else:
+        train_data, y_train = dp.augment_pos_labels(data[train_idx], y_train)
+        val_data, y_val     = dp.augment_pos_labels(data[val_idx], y_val)
+
+    test_data  = data[test_idx]
+
+#elif (smote == 'gauss') or (smote == 'smote'):
+#
+#    train_data, test_data, val_data, y_train, y_test, y_val = dp.train_test_val_split(data, target, test_size=0.2, val_size=0.25)
 
 else:
     raise ValueError(f"SMOTE parameter is incorrect. Change this: {smote}")
@@ -175,10 +246,18 @@ train_weights = {i: weight for i, weight in enumerate(train_weights)}
 print("Train weights:", train_weights)
 
 ### Hypertune the Model ######################
+dirname = Path(f"../Results/{directory}/{project_name}")
+dirname.mkdir(parents=True, exist_ok=True)
+
+
 best_model_path = Path(f"../Results/{directory}/{project_name}/best_model_{model_name}_hypertune")
 
-if best_model_path.exists():
-    hypermodel = tf.saved_model.load(best_model_path)
+if best_model_path.exists() and not overwrite:
+    hypermodel = tf.keras.models.load_model(best_model_path)
+    print(hypermodel.summary())
+    with open(f"../Results/{directory}/{project_name}/best_hps_{model_name}_hypertune.json", 'r') as bin:
+        best_hps = json.load(bin)
+
 else:
 
     tuner = kt.Hyperband(mdl,
@@ -196,27 +275,15 @@ else:
     # Get the optimal hyperparameters
     best_hps=tuner.get_best_hyperparameters(num_trials=1)[0]
     print("The best hyperparameters are: ", best_hps.values)
+    # Save the best hyperparameters
+    with open(f"../Results/{directory}/{project_name}/best_hps_{model_name}_hypertune.json", 'w') as bout:
+        json.dump(best_hps.values, bout)
     # Save the best model
-    tuner.get_best_models()[0].save(f"../Results/{directory}/best_model.h5")
+    #tuner.get_best_models()[0].save(f"../Results/{directory}/best_model.h5")
 
     # Build the model with the optimal hyperparameters and train it on the data for 50 epochs
     model = tuner.hypermodel.build(best_hps)
 
-    #tf.keras.utils.plot_model(
-    #    model,
-    #    to_file='lstm_autoencoder_model.png',
-    #    show_shapes=False,
-    #    show_dtype=False,
-    #    show_layer_names=True,
-    #    rankdir='TB',
-    #    expand_nested=False,
-    #    dpi=96,
-    #    layer_range=None,
-    #    show_layer_activations=False
-    #)
-
-    #print("BEST MODEL SUMMARY: ")
-    #print(model.summary())
     history = model.fit(train_data, y_train, epochs=50, batch_size=BATCH_SIZE,
                         validation_data=(val_data, y_val), class_weight=train_weights)
     print("BEST MODEL SUMMARY: ")
@@ -230,31 +297,23 @@ else:
     # Re-instantiate hypermodel and train with optimal number of epochs
     hypermodel = tuner.hypermodel.build(best_hps)
     ### Stop hypertuning and save
-    hypermodel.save(best_model_path)
+    #hypermodel.save(best_model_path)
 
     # Retrain the model using the best epoch
     hypermodel.fit(train_data, y_train, epochs=best_epoch, batch_size=BATCH_SIZE,
                         validation_data=(val_data, y_val), class_weight=train_weights)
 
+    ### Stop hypertuning and save
+    hypermodel.save(best_model_path)
 
+    ### Remove all trials ###
+    trial_path = Path(f"{directory}/{project_name}")
+    shutil.rmtree(trial_path)
 
 # Evaluate on the test data
 eval_result = hypermodel.evaluate(test_data, y_test)
 print("[test loss, test accuracy]:", eval_result)
 
-# Save a plot of the model
-# tf.keras.utils.plot_model(
-#     hypermodel,
-#     to_file=f"../Results/{directory}/test_model_{model_name}_hypertune/{model_name}_model_diagram.png",
-#     show_shapes=False,
-#     show_dtype=False,
-#     show_layer_names=True,
-#     rankdir='TB',
-#     expand_nested=False,
-#     dpi=96,
-#     layer_range=None,
-#     show_layer_activations=False
-# )
 # Make predictions
 y_pred_test  = hypermodel.predict(test_data)
 y_pred_train = hypermodel.predict(train_data)
@@ -267,12 +326,33 @@ filename = Path(f"../Results/{directory}/{'_'.join(data_name)}/{model_name}_resu
 filename.mkdir(parents=True, exist_ok=True)
 
 # Save the predictions
-np.savez(filename / "predictions.npz", test_preds=y_pred_test, train_preds=y_pred_train, val_preds=y_pred_val)
+if (filename / "predictions.npz").exists() and overwrite:
+    print("Overwriting the predictions...")
+    np.savez(filename / "predictions.npz", test_preds=y_pred_test, train_preds=y_pred_train, val_preds=y_pred_val)
+elif not (filename / "predictions.npz").exists():
+    print("Predictions do not exist. Saving predictions...")
+    np.savez(filename / "predictions.npz", test_preds=y_pred_test, train_preds=y_pred_train, val_preds=y_pred_val)
+else:
+    print("Predictions already exist and will not be overwritten.")
 
 # Save the targets
-np.savez(filename / "targets.npz", test_target=y_test, train_target=y_train, val_target=y_val)
+if (filename / "targets.npz").exists() and overwrite:
+    print("Overwriting the targets...")
+    np.savez(filename / "targets.npz", test_target=y_test, train_target=y_train, val_target=y_val)
+elif not (filename / "targets.npz").exists():
+    print("Targets do not exist. Saving targets...")
+    np.savez(filename / "targets.npz", test_target=y_test, train_target=y_train, val_target=y_val)
+else:
+    print("Targets already exist and will not be overwritten.")
 
 elapsed_time = (time.perf_counter() - start_time)
 rez=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024.0/1024.0
 
-np.savez(filename / "resource_metrics.npz", rez=rez, time=elapsed_time)
+if (filename / "resource_metrics.npz").exists() and overwrite:
+    print("Overwriting the resources...")
+    np.savez(filename / "resource_metrics.npz", rez=rez, time=elapsed_time)
+elif not (filename / "resource_metrics.npz").exists():
+    print("Resources do not exist. Saving resources...")
+    np.savez(filename / "resource_metrics.npz", rez=rez, time=elapsed_time)
+else:
+    print("Resources already exist and will not be overwritten.")

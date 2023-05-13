@@ -62,21 +62,22 @@ else:
 
 # Classification
 if event:
-    data, varnames, target = dp.load_data_nn(subject, sensor=sensor, dlh=dlh, keep_SH=False, return_target=event, smote=smote)
+    data, varnames, target = dp.load_data_nn(subject, sensor=sensor, dlh=dlh, keep_SH=False, return_target=event, smote=None)
     print("Shape of analytical dataset is: ", data.shape)
     print("The target is shaped: ", target.shape)
 # Regression
 else:
-    data, varnames, target = dp.load_data_nn(subject, sensor=sensor, dlh=dlh, keep_SH=False, return_target=event, smote=smote)
+    data, varnames, target = dp.load_data_nn(subject, sensor=sensor, dlh=dlh, keep_SH=False, return_target=event, smote=None)
     print("Shape of analytical dataset is: ", data.shape)
     print("The target is shaped: ", target.shape)
 
 ### Split the data into train, val, and testing
 target = np.where(target == 1, 1, 0)
 
+train_idx, val_idx, test_idx = dp.split_data_cv_indx(data,target)
 # Split data into time oriented chunks
 if smote is None:
-    train_idx, val_idx, test_idx = dp.split_data_cv_indx(data,target)
+
     train_data = data[train_idx]
     y_train    = target[train_idx]#.reshape((-1,1))
 
@@ -86,9 +87,30 @@ if smote is None:
     test_data  = data[test_idx]
     y_test     = target[test_idx]#.reshape((-1,1))
 
-elif (smote == 'gauss') or (smote == 'smote'):
+elif smote == 'gauss':
 
-    train_data, test_data, val_data, y_train, y_test, y_val = dp.train_test_val_split(data, target, test_size=0.2, val_size=0.25)
+    y_train    = target[train_idx]#.reshape((-1,1))
+    y_val      = target[val_idx]#.reshape((-1,1))
+    y_test     = target[test_idx]#.reshape((-1,1))
+
+    train_data = dp.add_gaussian_noise(data[train_idx], y_train)
+    val_data   = dp.add_gaussian_noise(data[val_idx], y_val)
+    test_data  = data[test_idx]
+
+
+elif smote == 'smote':
+
+    y_train    = target[train_idx]#.reshape((-1,1))
+    y_val      = target[val_idx]#.reshape((-1,1))
+    y_test     = target[test_idx]#.reshape((-1,1))
+
+    train_data = dp.augment_pos_labels(data[train_idx], y_train)
+    val_data   = dp.augment_pos_labels(data[val_idx], y_val)
+    test_data  = data[test_idx]
+
+#elif (smote == 'gauss') or (smote == 'smote'):
+#
+#    train_data, test_data, val_data, y_train, y_test, y_val = dp.train_test_val_split(data, target, test_size=0.2, val_size=0.25)
 
 else:
     raise ValueError(f"SMOTE parameter is incorrect. Change this: {smote}")
