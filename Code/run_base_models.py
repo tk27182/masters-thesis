@@ -2,6 +2,7 @@ import sys
 import time
 import resource
 from pathlib import Path
+import joblib
 
 import tensorflow as tf
 import numpy as np
@@ -21,6 +22,8 @@ start_time = time.perf_counter()
 tf.random.set_seed(0)
 
 ### Get the arguments
+overwrite = True
+
 args = sys.argv[1:]
 print(args)
 
@@ -156,28 +159,42 @@ print("Train weights:", train_weights)
 #####################################################################
 ### Build and hypertune the models ###
 
-# Set parameter grids
-rf_param_grid = {
-    'n_estimators': [50, 100, 200, 500, 1000, 2000, 5000],
-    'max_depth': [5, 10, 15, 20, 25, None]
-}
+# Define path to save/load model
+dirname = Path(f"../Results/{directory}/{project_name}")
+dirname.mkdir(parents=True, exist_ok=True)
 
-lr_param_grid = {
-    'C': [0.001, 0.01, 0.1, 1, 10, 100]
-}
+best_model_path = Path(f"../Results/{directory}/{project_name}/best_model_{model_name}_hypertune.joblib")
 
-### Create model dictionary
-rfc = RandomForestClassifier(class_weight=train_weights, random_state=42)
-lrc = LogisticRegression(class_weight=train_weights, random_state=42)
+# Load an existing model
+if best_model_path.exists() and not overwrite:
+    clf = joblib.load(best_model_path)
+else:
 
-model_dict = {'randomforest': GridSearchCV(rfc, param_grid=rf_param_grid, cv = ps, scoring='roc_auc_ovr_weighted', verbose=3),
-              'lr': GridSearchCV(lrc, param_grid=lr_param_grid, cv = ps, scoring='roc_auc_ovr_weighted', verbose=3)
-              }
+    # Set parameter grids
+    rf_param_grid = {
+        'n_estimators': [50, 100, 200, 500, 1000, 2000, 5000],
+        'max_depth': [5, 10, 15, 20, 25, None]
+    }
 
-clf = model_dict[model_name]
-print("MODEL NAME: ", model_name)
+    lr_param_grid = {
+        'C': [0.001, 0.01, 0.1, 1, 10, 100]
+    }
 
-clf.fit(combined_train_data, combined_train_labels)
+    ### Create model dictionary
+    rfc = RandomForestClassifier(class_weight=train_weights, random_state=42)
+    lrc = LogisticRegression(class_weight=train_weights, random_state=42)
+
+    model_dict = {'randomforest': GridSearchCV(rfc, param_grid=rf_param_grid, cv = ps, scoring='roc_auc_ovr_weighted', verbose=3),
+                'lr': GridSearchCV(lrc, param_grid=lr_param_grid, cv = ps, scoring='roc_auc_ovr_weighted', verbose=3)
+                }
+
+    clf = model_dict[model_name]
+    print("MODEL NAME: ", model_name)
+
+    clf.fit(combined_train_data, combined_train_labels)
+
+    # Save the model
+    joblib.dump(clf, best_model_path, compress = 3)
 
 # Print hyperparameter esults
 print("Report: \n", pd.DataFrame(clf.cv_results_))
@@ -196,13 +213,33 @@ filename = Path(f"../Results/{directory}/{'_'.join(data_name)}/{model_name}_resu
 filename.mkdir(parents=True, exist_ok=True)
 
 # Save the predictions
-np.savez(filename / "predictions.npz", test_preds=test_preds, train_preds=train_preds, val_preds=val_preds)
+if (filename / "predictions.npz").exists() and overwrite:
+    print("Overwriting the predictions...")
+    np.savez(filename / "predictions.npz", test_preds=test_preds, train_preds=train_preds, val_preds=val_preds)
+elif not (filename / "predictions.npz").exists():
+    print("Predictions do not exist. Saving predictions...")
+    np.savez(filename / "predictions.npz", test_preds=test_preds, train_preds=train_preds, val_preds=val_preds)
+else:
+    print("Predictions already exist and will not be overwritten.")
 
 # Save the targets
-np.savez(filename / "targets.npz", test_target=y_test, train_target=y_train, val_target=y_val)
+if (filename / "targets.npz").exists() and overwrite:
+    print("Overwriting the targets...")
+    np.savez(filename / "targets.npz", test_target=y_test, train_target=y_train, val_target=y_val)
+elif not (filename / "targets.npz").exists():
+    print("Targets do not exist. Saving targets...")
+    np.savez(filename / "targets.npz", test_target=y_test, train_target=y_train, val_target=y_val)
+else:
+    print("Targets already exist and will not be overwritten.")
 
-# Save time and resources
 elapsed_time = (time.perf_counter() - start_time)
 rez=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024.0/1024.0
 
-np.savez(filename / "resource_metrics.npz", rez=rez, time=elapsed_time)
+if (filename / "resource_metrics.npz").exists() and overwrite:
+    print("Overwriting the resources...")
+    np.savez(filename / "resource_metrics.npz", rez=rez, time=elapsed_time)
+elif not (filename / "resource_metrics.npz").exists():
+    print("Resources do not exist. Saving resources...")
+    np.savez(filename / "resource_metrics.npz", rez=rez, time=elapsed_time)
+else:
+    print("Resources already exist and will not be overwritten.")
