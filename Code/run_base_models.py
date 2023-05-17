@@ -96,9 +96,12 @@ elif smote == 'gauss':
     y_val      = target[val_idx]#.reshape((-1,1))
     y_test     = target[test_idx]#.reshape((-1,1))
 
-    train_data = dp.add_gaussian_noise(data[train_idx], y_train)
-    val_data   = dp.add_gaussian_noise(data[val_idx], y_val)
+    train_data, ty_train = dp.add_gaussian_noise(data[train_idx], y_train)
+    val_data, ty_val     = dp.add_gaussian_noise(data[val_idx], y_val)
     test_data  = data[test_idx]
+
+    y_train = ty_train
+    y_val   = ty_val
 
 
 elif smote == 'smote':
@@ -107,9 +110,12 @@ elif smote == 'smote':
     y_val      = target[val_idx]#.reshape((-1,1))
     y_test     = target[test_idx]#.reshape((-1,1))
 
-    train_data = dp.augment_pos_labels(data[train_idx], y_train)
-    val_data   = dp.augment_pos_labels(data[val_idx], y_val)
+    train_data, ty_train = dp.augment_pos_labels(data[train_idx], y_train)
+    val_data, ty_val     = dp.augment_pos_labels(data[val_idx], y_val)
     test_data  = data[test_idx]
+
+    y_train = ty_train
+    y_val   = ty_val
 
 #elif (smote == 'gauss') or (smote == 'smote'):
 #
@@ -120,7 +126,7 @@ else:
 
 # Use indices to make PredefinedSplit for hyperparameter optimization
 train_idx = np.full( (train_data.shape[0],) , -1, dtype=int)
-val_idx  = np.full( (val_data.shape[0], ) , 0, dtype=int)
+val_idx   = np.full( (val_data.shape[0], ) , 0, dtype=int)
 
 test_fold = np.append(train_idx, val_idx)
 print(test_fold.shape)
