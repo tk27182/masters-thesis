@@ -82,11 +82,13 @@ BATCH_SIZE=512
 overwrite=True
 
 ### Create model dictionary
-model_dict = {'lstm':             nnm.HyperLSTM(loss=loss, num_features=num_features, binary=binary),
-              'bilstm':           nnm.HyperBiLSTM(loss=loss, num_features=num_features, binary=binary),
-              'lstm-autoencoder': nnm.HyperLSTMAutoEncoder(loss=loss, time_steps=TIME_STEPS, num_features=num_features),
-              'ann':              nnm.HyperANN(loss=loss, num_features=num_features, binary=binary),
-              'simplernn':        nnm.HyperSimpleRNN(loss=loss, num_features=num_features, binary=binary),
+model_dict = {'lstm':                 nnm.HyperLSTM(loss=loss, num_features=num_features, binary=binary),
+              'bilstm':               nnm.HyperBiLSTM(loss=loss, num_features=num_features, binary=binary),
+              'lstm-autoencoder':     nnm.HyperLSTMAutoEncoder(loss=loss, time_steps=TIME_STEPS, num_features=num_features),
+              'deeplstm-autoencoder': nnm.HyperDeepLSTMAutoEncoder(loss=loss, time_steps=TIME_STEPS, num_features=num_features),
+              'ann':                  nnm.HyperANN(loss=loss, num_features=num_features, binary=binary),
+              'simplernn':            nnm.HyperSimpleRNN(loss=loss, num_features=num_features, binary=binary),
+              'autoencoder':          nnm.HyperAutoencoder(loss=loss, num_features=num_features, binary=binary)
               #'randomforest':     nnm.HyperRandomForest()
               }
 
@@ -139,14 +141,15 @@ train_idx, val_idx, test_idx = dp.split_data_cv_indx(data,target)
 # Split data into time oriented chunks
 if smote is None:
 
-    train_data = data[train_idx]
-    y_train    = target[train_idx]#.reshape((-1,1))
+    if 'autoencoder' not in model_name:
+        train_data = data[train_idx]
+        y_train    = target[train_idx]#.reshape((-1,1))
 
-    val_data   = data[val_idx]
-    y_val      = target[val_idx]#.reshape((-1,1))
+        val_data   = data[val_idx]
+        y_val      = target[val_idx]#.reshape((-1,1))
 
-    test_data  = data[test_idx]
-    y_test     = target[test_idx]#.reshape((-1,1))
+        test_data  = data[test_idx]
+        y_test     = target[test_idx]#.reshape((-1,1))
 
 elif smote == 'gauss':
 
