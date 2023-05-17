@@ -23,9 +23,9 @@ import keras_tuner as kt
 #from keras.models import Sequential
 #from keras.layers import Dense, Embedding, Dropout, LSTM, Activation, Input, Conv1D, UpSampling1D
 #from keras.optimizers import Adam
-#from keras.callbacks import EarlyStopping, Callback
+from tensorflow.keras.callbacks import EarlyStopping, Callback
 #from keras.metrics import AUC, RootMeanSquaredError
-#from tensorflow.keras.models import Model
+from tensorflow.keras.models import Model
 
 
 from sklearn.model_selection import train_test_split
@@ -33,13 +33,46 @@ from sklearn.preprocessing import LabelBinarizer, LabelEncoder
 from sklearn.metrics import r2_score, auc, roc_curve, roc_auc_score, log_loss
 
 ################################################################################################################################
-#### Baseline Models: To compare Neural Networks to ####
-def build_rf():
-    return
-def build_lr():
-    return
-################################################################################################################################
 #### Hyper Classes: To pass arguments to the function models ####
+
+class HyperAutoencoder(kt.HyperModel):
+
+    def __init__(self, loss, num_features, binary):
+        super(HyperAutoencoder, self).__init__()
+        self.loss         = loss
+        self.num_features = num_features
+        self.binary       = binary
+
+    def build(self, hp):
+
+         # Initialize the hyperparameters
+        code_dim   = hp.Int("code_units", min_value = 4, max_value = 8, step = 1)
+        hidden_dim = hp.Int("units", min_value = 60, max_value = 640, step = 5)
+        num_layers = hp.Int("layers", min_value = 2, max_value = 6, step = 1)
+
+        model = tf.keras.Sequential()
+
+        # Encoder
+        for i in range(1, num_layers):
+            model.add(tf.keras.layers.Dense(int(hidden_dim/i), activation = 'relu'))
+
+        # Code layer
+        model.add(tf.keras.layers.Dense(code_dim, activation = 'relu'))
+
+        # Decoder
+        for i in range(1, num_layers):
+            model.add(tf.keras.layers.Dense(int(hidden_dim/i), activation = 'relu'))
+
+        # Tune the learning rate
+        hp_learning_rate = hp.Choice('learning_rate', values=[1e-4, 5e-4, 1e-3, 2e-3, 5e-3])
+
+        # Tune the learning rate
+        hp_learning_rate = hp.Choice('learning_rate', values=[1e-3, 5e-3])
+
+        model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=hp_learning_rate),
+                            loss='mean_squared_error')
+
+        return model
 
 class HyperANN(kt.HyperModel):
 
@@ -163,7 +196,7 @@ class HyperDeepLSTMAutoEncoder(kt.HyperModel):
         num_layers = hp.Int("layers", min_value = 2, max_value = 6, step = 1)
 
         autoencoder = tf.keras.Sequential()
-        autoencoder.add(tf.keras.Input(shape=(self.time_steps, self.num_features)))
+        #autoencoder.add(tf.keras.Input(shape=(self.time_steps, self.num_features)))
 
         for i in range(1, num_layers):
             autoencoder.add(tf.keras.layers.LSTM(int(lstm_dim/i), return_sequences = True))
@@ -178,6 +211,12 @@ class HyperDeepLSTMAutoEncoder(kt.HyperModel):
 
         autoencoder.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(self.num_features)))
 
+        # Tune the learning rate
+        hp_learning_rate = hp.Choice('learning_rate', values=[5e-4, 1e-3, 2e-3, 5e-3, 1e-2])
+
+        autoencoder.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=hp_learning_rate),
+                            loss=self.loss)
+
         return autoencoder
 
 class HyperLSTMAutoEncoder(kt.HyperModel):
@@ -190,12 +229,10 @@ class HyperLSTMAutoEncoder(kt.HyperModel):
 
     def build(self, hp):
 
-        lstm_dim = hp.Int("units", min_value = 32, max_value=256, step = 16)
-
-        #autoencoder = LSTMAutoEncoder(self.time_steps, self.num_features, lstm_dim)
+        lstm_dim = hp.Int("units", min_value = 16, max_value=256, step = 2)
 
         autoencoder = tf.keras.models.Sequential()
-        autoencoder.add(tf.keras.Input(shape=(self.time_steps, self.num_features)))
+        #autoencoder.add(tf.keras.Input(shape=(self.time_steps, self.num_features)))
         autoencoder.add(tf.keras.layers.LSTM(lstm_dim, return_sequences=False,
                                      name = "encoder"))
 
@@ -203,7 +240,7 @@ class HyperLSTMAutoEncoder(kt.HyperModel):
         autoencoder.add(tf.keras.layers.LSTM(self.num_features,
                                         return_sequences=True, name = 'decoder'))
         autoencoder.add(tf.keras.layers.TimeDistributed(
-                                tf.keras.layers.Dense(self.num_features)))
+                                tf.keras.layers.Dense(self.num_features, activation = 'sigmoid')))
 
         # Tune the learning rate
         hp_learning_rate = hp.Choice('learning_rate', values=[5e-4, 1e-3, 2e-3, 5e-3, 1e-2])
@@ -211,8 +248,6 @@ class HyperLSTMAutoEncoder(kt.HyperModel):
         autoencoder.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=hp_learning_rate),
                             loss=self.loss)
 
-        outputs = [layer.output for layer in autoencoder.layers]
-        print(outputs)
         return autoencoder
 
 class HyperLSTM(kt.HyperModel):
@@ -238,6 +273,59 @@ class HyperLSTM(kt.HyperModel):
             # Choose an optimal value between 10 and 80
             hp_units = hp.Int(f'units-{i}', min_value=10, max_value=256, step=5)
             model.add(tf.keras.layers.LSTM(units=hp_units, return_sequences=True,
+                                            name = f'LSTM-layer-{i}'))
+            # Add dropout layer
+            hp_dropout_frac = hp.Float(f'dropout-{i}', min_value=0, max_value=0.5, step=0.05)
+            model.add(tf.keras.layers.Dropout(hp_dropout_frac))
+
+        # add flatten so that sequences are condensed
+        model.add(tf.keras.layers.Flatten())
+        # Output layer
+        #model.add(tf.keras.layers.LSTM(8, return_sequences=False, name = 'final-LSTM-layer'))
+        if self.binary:
+            model.add(tf.keras.layers.Dense(units=1, activation = 'sigmoid', name = 'predictions'))
+        else:
+            model.add(tf.keras.layers.Dense(self.num_features, activation='softmax', name = 'predictions'))
+
+        # Tune the learning rate
+        hp_learning_rate = hp.Choice('learning_rate', values=[1e-4, 5e-4, 1e-3, 2e-3, 5e-3])
+
+        model.compile(optimizer=keras.optimizers.Adam(learning_rate=hp_learning_rate), \
+                        loss = self.loss,
+                        metrics = [
+                            keras.metrics.BinaryAccuracy(name='accuracy'),
+                            keras.metrics.Precision(name='precision'),
+                            keras.metrics.Recall(name='recall'),
+                            keras.metrics.AUC(name='auc'),
+                            keras.metrics.AUC(name='prc', curve='PR') ]
+                        )
+
+        return model
+
+class HyperStatefulLSTM(kt.HyperModel):
+
+    def __init__(self, loss, num_features=2, binary=True):
+        super(HyperStatefulLSTM, self).__init__()
+        self.loss = loss
+        self.num_features = num_features
+        self.binary = binary
+
+    def build(self, hp):
+
+        model = tf.keras.models.Sequential()
+        model.add(tf.keras.layers.Input(batch_input_shape = ()))
+
+        # Tune the number of hidden layers
+        #for i in range(hp.Int("hidden_layers", min_value=1, max_value=5, step=1)):
+        for i in range(hp.Int("hidden_layers", min_value=0, max_value=5, step=1)):
+            # Tune the number of nodes in the hidden layers
+            #if i == 4: # max_values - 1
+            #    return_sequences = False
+            #else:
+            #    return_sequences = True
+            # Choose an optimal value between 10 and 80
+            hp_units = hp.Int(f'units-{i}', min_value=10, max_value=256, step=5)
+            model.add(tf.keras.layers.LSTM(units=hp_units, return_sequences=True, stateful=True,
                                             name = f'LSTM-layer-{i}'))
             # Add dropout layer
             hp_dropout_frac = hp.Float(f'dropout-{i}', min_value=0, max_value=0.5, step=0.05)
