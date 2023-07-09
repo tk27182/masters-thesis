@@ -108,24 +108,67 @@ if ('lstm' in model_name) or ('rnn' in model_name):
     print("Inside the LSTM or RNN section!")
     # Classification
     if event:
-        data, target = dp.create_featured_dataset(subject, sensor=sensor, dlh=dlh, keep_SH=False, keep_event=event, smote=None)
+
+        # Individual model
+        if model_type == 'indv':
+
+            data, target = dp.create_featured_dataset(subject, sensor=sensor, dlh=dlh, keep_SH=False, keep_event=event, smote=None)
+
+        # General model
+        elif model_type == 'general':
+            data, target, hdata, htarget = dp.load_general_data_lstm(subject, sensor=sensor, dlh=dlh, keep_SH=False, keep_event=event, smote=None)
+
+        else:
+            raise ValueError(f"Model type should be indv or general. Not {model_type}")
+
     # Regression
     else:
-        data, target = dp.create_featured_dataset(subject, sensor=sensor, dlh=dlh, keep_SH=True, keep_event=event, smote=None)
+        # Individual model
+        if model_type == 'indv':
+            data, target = dp.create_featured_dataset(subject, sensor=sensor, dlh=dlh, keep_SH=True, keep_event=event, smote=None)
+
+        # General model
+        elif model_type == 'general':
+            data, target, hdata, htarget = dp.load_general_data_lstm(subject, sensor=sensor, dlh=dlh, keep_SH=True, keep_event=event, smote=None)
+
+        else:
+            raise ValueError(f"Model type should be indv or general. Not {model_type}")
 
 # ANN or Classical Machine Learning Algorithm
 else:
     print("Inside the ANN section!")
     # Classification
     if event:
-        data, varnames, target = dp.load_data_nn(subject, sensor=sensor, dlh=dlh, keep_SH=False, return_target=event, smote=None)
-        print("Shape of analytical dataset is: ", data.shape)
-        print("The target is shaped: ", target.shape)
+
+        if model_type == 'indv':
+            data, varnames, target = dp.load_data_nn(subject, sensor=sensor, dlh=dlh, keep_SH=False, return_target=event, smote=None)
+            print("Shape of analytical dataset is: ", data.shape)
+            print("The target is shaped: ", target.shape)
+
+        elif model_type == 'general':
+            data, target, hdata, htarget = dp.load_general_data_nn(subject, sensor=sensor, dlh=dlh, keep_SH=False, return_target=event, smote=None)
+            print("Shape of analytical dataset is: ", data.shape)
+            print("The target is shaped: ", target.shape)
+
+        else:
+            raise ValueError(f"Model type should be indv or general. Not {model_type}")
+
     # Regression
     else:
-        data, varnames, target = dp.load_data_nn(subject, sensor=sensor, dlh=dlh, keep_SH=False, return_target=event, smote=None)
-        print("Shape of analytical dataset is: ", data.shape)
-        print("The target is shaped: ", target.shape)
+        # Indvidual
+        if model_type == 'indv':
+            data, varnames, target = dp.load_data_nn(subject, sensor=sensor, dlh=dlh, keep_SH=True, return_target=event, smote=None)
+            print("Shape of analytical dataset is: ", data.shape)
+            print("The target is shaped: ", target.shape)
+
+        # General
+        elif model_type == 'general':
+            data, target, hdata, htarget = dp.load_general_data_nn(subject, sensor=sensor, dlh=dlh, keep_SH=True, return_target=event, smote=None)
+            print("Shape of analytical dataset is: ", data.shape)
+            print("The target is shaped: ", target.shape)
+
+        else:
+            raise ValueError(f"Model type should be indv or general. Not {model_type}")
 
 
 
@@ -136,95 +179,147 @@ target = np.where(target == 1, 1, 0)
 #                   np.where(target == 1, 1, 0)
 #                    ]).T
 
-train_idx, val_idx, test_idx = dp.split_data_cv_indx(data,target)
+if model_type == 'indv':
+    train_idx, val_idx, test_idx = dp.split_data_cv_indx(data,target)
 
-# Split data into time oriented chunks
-if smote is None:
+    # Split data into time oriented chunks
+    if smote is None:
 
-    if 'autoencoder' not in model_name:
-        train_data = data[train_idx]
+        # Don't split the data the same way for the autoencoder
+        if 'autoencoder' not in model_name:
+            train_data = data[train_idx]
+            y_train    = target[train_idx]#.reshape((-1,1))
+
+            val_data   = data[val_idx]
+            y_val      = target[val_idx]#.reshape((-1,1))
+
+            test_data  = data[test_idx]
+            y_test     = target[test_idx]#.reshape((-1,1))
+
+        else:
+            # Prepare data for the autoencoder model
+            normal, anomalous = dp.process_autoencoder(data[train_idx], data[test_idx], data[val_idx],
+                                                    target[train_idx], target[test_idx], target[val_idx])
+
+            normal_train, normal_val, normal_train_target, normal_val_target             = normal
+            anomalous_train, anomalous_val, anomalous_train_target, anomalous_val_target = anomalous
+
+            train_data = normal_train
+            y_train    = normal_train_target
+
+            test_data  = data[test_idx]
+            y_test     = target[test_idx]
+
+            val_data   = normal_val
+            y_val      = normal_val_target
+
+
+    elif smote == 'gauss':
+
         y_train    = target[train_idx]#.reshape((-1,1))
-
-        val_data   = data[val_idx]
         y_val      = target[val_idx]#.reshape((-1,1))
-
-        test_data  = data[test_idx]
         y_test     = target[test_idx]#.reshape((-1,1))
 
-elif smote == 'gauss':
+        if len(data.shape) > 2:
+            train_data = []
+            val_data = []
+            new_y_train = []
+            new_y_val = []
+            for f in range(data.shape[2]):
+                tfeature_data, ty_train = dp.add_gaussian_noise(data[train_idx, :, f], y_train)
+                vfeature_data, vy_val = dp.add_gaussian_noise(data[val_idx, :, f], y_val)
 
-    y_train    = target[train_idx]#.reshape((-1,1))
-    y_val      = target[val_idx]#.reshape((-1,1))
-    y_test     = target[test_idx]#.reshape((-1,1))
+                train_data.append(tfeature_data)
+                val_data.append(vfeature_data)
 
-    if len(data.shape) > 2:
-        train_data = []
-        val_data = []
-        new_y_train = []
-        new_y_val = []
-        for f in range(data.shape[2]):
-            tfeature_data, ty_train = dp.add_gaussian_noise(data[train_idx, :, f], y_train)
-            vfeature_data, vy_val = dp.add_gaussian_noise(data[val_idx, :, f], y_val)
+                new_y_train.append(ty_train)
+                new_y_val.append(vy_val)
 
-            train_data.append(tfeature_data)
-            val_data.append(vfeature_data)
+            train_data = np.stack(train_data, axis = 2)
+            val_data   = np.stack(val_data, axis = 2)
+            y_train = ty_train #np.vstack(new_y_train)
+            y_val   = vy_val #np.vstack(new_y_val)
 
-            new_y_train.append(ty_train)
-            new_y_val.append(vy_val)
+        else:
+            train_data, y_train = dp.add_gaussian_noise(data[train_idx], y_train)
+            val_data, y_val     = dp.add_gaussian_noise(data[val_idx], y_val)
 
-        train_data = np.stack(train_data, axis = 2)
-        val_data   = np.stack(val_data, axis = 2)
-        y_train = ty_train #np.vstack(new_y_train)
-        y_val   = vy_val #np.vstack(new_y_val)
+        test_data  = data[test_idx]
+
+
+    elif smote == 'smote':
+
+        y_train    = target[train_idx]#.reshape((-1,1))
+        y_val      = target[val_idx]#.reshape((-1,1))
+        y_test     = target[test_idx]#.reshape((-1,1))
+
+        if len(data.shape) > 2:
+
+            train_data = []
+            val_data = []
+            new_y_train = []
+            new_y_val = []
+            for f in range(data.shape[2]):
+                tfeature_data, ty_train = dp.augment_pos_labels(data[train_idx, :, f], y_train)
+                vfeature_data, vy_val   = dp.augment_pos_labels(data[val_idx, :, f], y_val)
+
+                train_data.append(tfeature_data)
+                val_data.append(vfeature_data)
+
+                new_y_train.append(ty_train)
+                new_y_val.append(vy_val)
+
+            train_data = np.stack(train_data, axis = 2)
+            val_data   = np.stack(val_data, axis = 2)
+
+            y_train = ty_train #np.hstack(new_y_train) #np.stack(new_y_train, axis = 0)
+            y_val   = vy_val #np.hstack(new_y_val) #np.stack(new_y_val, axis = 0)
+
+        else:
+            train_data, y_train = dp.augment_pos_labels(data[train_idx], y_train)
+            val_data, y_val     = dp.augment_pos_labels(data[val_idx], y_val)
+
+        test_data  = data[test_idx]
+
+
+    elif smote == 'downsample':
+
+        # Load the downsampled datasets
+        if ('lstm' in model_name) or ('rnn' in model_name):
+            data, target = dp.load_data_original_featured(mtype=model_type, subject=subject, sensor=sensor, dlh=dlh)
+
+        else:
+            data, target = dp.load_data_original_nn(mtype=model_type, subject=subject, sensor=sensor, dlh=dlh)
+
+        # Split into train, test, val
+        train_idx, val_idx, test_idx = dp.split_data_cv_indx(data,target)
+
+        train_data = data[train_idx]
+        test_data  = data[test_idx]
+        val_data   = data[val_idx]
+
+        y_train = target[train_idx]
+        y_test  = target[test_idx]
+        y_val   = target[val_idx]
+
+    #elif (smote == 'gauss') or (smote == 'smote'):
+    #
+    #    train_data, test_data, val_data, y_train, y_test, y_val = dp.train_test_val_split(data, target, test_size=0.2, val_size=0.25)
 
     else:
-        train_data, y_train = dp.add_gaussian_noise(data[train_idx], y_train)
-        val_data, y_val     = dp.add_gaussian_noise(data[val_idx], y_val)
+        raise ValueError(f"SMOTE parameter is incorrect. Change this: {smote}")
 
-    test_data  = data[test_idx]
+elif model_type == 'general':
 
+    train_data = data
+    test_data  = hdata
 
-elif smote == 'smote':
-
-    y_train    = target[train_idx]#.reshape((-1,1))
-    y_val      = target[val_idx]#.reshape((-1,1))
-    y_test     = target[test_idx]#.reshape((-1,1))
-
-    if len(data.shape) > 2:
-
-        train_data = []
-        val_data = []
-        new_y_train = []
-        new_y_val = []
-        for f in range(data.shape[2]):
-            tfeature_data, ty_train = dp.augment_pos_labels(data[train_idx, :, f], y_train)
-            vfeature_data, vy_val   = dp.augment_pos_labels(data[val_idx, :, f], y_val)
-
-            train_data.append(tfeature_data)
-            val_data.append(vfeature_data)
-
-            new_y_train.append(ty_train)
-            new_y_val.append(vy_val)
-
-        train_data = np.stack(train_data, axis = 2)
-        val_data   = np.stack(val_data, axis = 2)
-
-        y_train = ty_train #np.hstack(new_y_train) #np.stack(new_y_train, axis = 0)
-        y_val   = vy_val #np.hstack(new_y_val) #np.stack(new_y_val, axis = 0)
-
-    else:
-        train_data, y_train = dp.augment_pos_labels(data[train_idx], y_train)
-        val_data, y_val     = dp.augment_pos_labels(data[val_idx], y_val)
-
-    test_data  = data[test_idx]
-
-#elif (smote == 'gauss') or (smote == 'smote'):
-#
-#    train_data, test_data, val_data, y_train, y_test, y_val = dp.train_test_val_split(data, target, test_size=0.2, val_size=0.25)
+    train_target = target
+    test_target   = htarget
 
 else:
-    raise ValueError(f"SMOTE parameter is incorrect. Change this: {smote}")
 
+    raise ValueError("Model type is incorrect. It should be indv or general.")
 
 print("Data shapes:")
 print(train_data.shape)
@@ -242,11 +337,15 @@ print("Val: ", np.sum(y_val == 1))
 print("Test: ", np.sum(y_test == 1))
 
 # Compute the class weights
-train_weights = class_weight.compute_class_weight(class_weight='balanced',
-                                classes=np.unique(y_train.ravel()), y=y_train.ravel())
-# Reformat for tensorflow
-train_weights = {i: weight for i, weight in enumerate(train_weights)}
-print("Train weights:", train_weights)
+if 'autoencoder' not in model_name:
+    train_weights = class_weight.compute_class_weight(class_weight='balanced',
+                                    classes=np.unique(y_train.ravel()), y=y_train.ravel())
+    # Reformat for tensorflow
+    train_weights = {i: weight for i, weight in enumerate(train_weights)}
+    print("Train weights:", train_weights)
+else:
+    train_weights = {0: 1, 1: 1}
+    print("No train weights assigned for autoencoder")
 
 ### Hypertune the Model ######################
 dirname = Path(f"../Results/{directory}/{project_name}")
@@ -318,9 +417,25 @@ eval_result = hypermodel.evaluate(test_data, y_test)
 print("[test loss, test accuracy]:", eval_result)
 
 # Make predictions
-y_pred_test  = hypermodel.predict(test_data)
-y_pred_train = hypermodel.predict(train_data)
-y_pred_val   = hypermodel.predict(val_data)
+if 'autoencoder' not in model_name:
+    y_pred_test  = hypermodel.predict(test_data)
+    y_pred_train = hypermodel.predict(train_data)
+    y_pred_val   = hypermodel.predict(val_data)
+
+else:
+
+    # Get the original train and val data
+    train_data = data[train_idx]
+    val_data   = data[val_idx]
+
+    y_train = target[train_idx]
+    y_val   = target[val_idx]
+
+    # Reconstruct the time series
+    train_scores, threshold = nnm.reconstruct(hypermodel, train_data, threshold=None)
+    test_scores, _          = nnm.reconstruct(hypermodel, test_data, threshold=threshold)
+    val_scores, _           = nnm.reconstruct(hypermodel, val_data, threshold=threshold)
+
 
 # Save the predictions
 filename = Path(f"../Results/{directory}/{'_'.join(data_name)}/{model_name}_results/")
