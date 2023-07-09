@@ -8,11 +8,59 @@ Created on Dec 3 2022 16:40:00
 
 import numpy as np
 import pandas as pd
+import scipy.io as sio
 import tensorflow as tf
 from imblearn.over_sampling import SMOTE
 from sklearn.model_selection import train_test_split
 
 pd.options.mode.chained_assignment = None
+
+def process_autoencoder(X_train, X_test, X_val, y_train, y_test, y_val):
+
+    train_labels = y_train.astype(bool)
+    test_labels  = y_test.astype(bool)
+    val_labels   = y_val.astype(bool)
+
+    print("Train labels shape: ", train_labels.shape)
+    print("Test labels shape: ", test_labels.shape)
+    print("Val labels shape: ", val_labels.shape)
+
+    normal_train_data = X_train[~train_labels]
+    normal_test_data  = X_test[~test_labels]
+    normal_val_data   = X_val[~val_labels]
+
+    print("Normal train data shape is: ", normal_train_data.shape)
+    print("Normal test data shape is: ", normal_test_data.shape)
+    print("Normal val data shape is: ", normal_val_data.shape)
+
+    anomalous_train_data = X_train[train_labels]
+    anomalous_test_data  = X_test[test_labels]
+    anomalous_val_data   = X_val[val_labels]
+
+    print("Anomalous train data shape is: ", anomalous_train_data.shape)
+    print("Anomalous test data shape is: ", anomalous_test_data.shape)
+    print("Anomalous val data shape is: ", anomalous_val_data.shape)
+
+    # Separate the targets
+    normal_train_target = y_train[~train_labels]
+    normal_test_target  = y_test[~test_labels]
+    normal_val_target   = y_val[~val_labels]
+
+    anomalous_train_target = y_train[train_labels]
+    anomalous_test_target  = y_test[test_labels]
+    anomalous_val_target   = y_val[val_labels]
+
+    return ((normal_train_data, normal_val_data,
+             normal_train_target, normal_val_target),
+             (anomalous_train_data, anomalous_val_data,
+              anomalous_val_data, anomalous_val_target)
+              )
+
+            #((normal_train_data, normal_test_data, normal_val_data,
+           #  normal_train_target, normal_test_target, normal_val_target),
+           # (anomalous_train_data, anomalous_test_data, anomalous_val_data,
+           #  anomalous_train_target, anomalous_test_target, anomalous_val_target)
+           #  )
 
 def add_gaussian_noise(data, target):
 
@@ -57,10 +105,105 @@ def add_gaussian_noise(data, target):
 def augment_pos_labels(data, target):
 
     # Apply some Gaussian noise to each row using SMOTE - oversample the minority class
-    sm = SMOTE(random_state=0)
+    sm = SMOTE(random_state=0, n_neighbor=5)
     data_sampled, target_sampled = sm.fit_resample(data, target)
     return data_sampled, target_sampled
 
+
+def load_data_original_nn(mtype, subject, sensor='both', dlh=0):
+
+    if dlh == 0:
+        dlh = ''
+    else:
+        dlh = f"dlh{dlh}_"
+
+    if sensor == 'both':
+        sensor = ''
+    else:
+        sensor += '-'
+
+    if mtype == 'general':
+
+        # Load general dataset
+        filename = f'generalModelfirstevent--{subject.upper()}--{sensor}subsample_{dlh}12hours_locf'
+        temp_data = sio.loadmat(filename)
+
+        data = temp_data['gdata']['data'][0,0]
+        target = temp_data['gtarget'].ravel()
+
+    else:
+
+        # Load individual dataset
+        filename = f'{subject}_12hours_{sensor}firsteventsubsample_{dlh}locf'
+        temp_data = sio.loadmat(filename)
+
+        data = temp_data['tdata']['data'][0,0]
+        target = temp_data['ttarget'].ravel()
+
+    return data, target
+
+def load_data_original_featured(mtype, subject, sensor='both', dlh=0):
+
+
+    if dlh == 0:
+        dlh = ''
+    else:
+        dlh = f"dlh{dlh}_"
+
+    if sensor == 'both':
+
+        if mtype == 'general':
+
+            lfilename = f'generalModelfirstevent--{subject.upper()}--left-subsample_{dlh}12hours_locf'
+            rfilename = f'generalModelfirstevent--{subject.upper()}--right-subsample_{dlh}12hours_locf'
+
+            left_data  = sio.loadmat(lfilename)
+            right_data = sio.loadmat(rfilename)
+
+            ldata = left_data['gdata']['data'][0,0]
+            rdata = right_data['gdata']['data'][0,0]
+
+            ltarget = left_data['gtarget'].ravel()
+            rtarget = right_data['gtarget'].ravel()
+
+        else: # Individual
+
+            lfilename = f'{subject}_12hours_left-firsteventsubsample_{dlh}locf'
+            rfilename = f'{subject}_12hours_right-firsteventsubsample_{dlh}locf'
+
+            left_data  = sio.loadmat(lfilename)
+            right_data = sio.loadmat(rfilename)
+
+            ldata = left_data['tdata']['data'][0,0]
+            rdata = right_data['tdata']['data'][0,0]
+
+            ltarget = left_data['ttarget'].ravel()
+            rtarget = right_data['ttarget'].ravel()
+
+        data = np.stack((ldata, rdata), axis = 2)
+        target = np.stack((ltarget, rtarget), axis = 1)
+
+    else:
+
+        if mtype == 'general':
+
+            filename = f'generalModelfirstevent--{subject.upper()}--{sensor}-subsample_{dlh}12hours_locf'
+            temp_data = sio.loadmat(filename)
+
+            data = temp_data['gdata']['data'][0,0]
+            target = temp_data['gtarget'].ravel()
+
+        else:
+            filename = f'{subject}_12hours_{sensor}-firsteventsubsample_{dlh}locf'
+            temp_data = sio.loadmat(filename)
+
+            data = temp_data['gdata']['data'][0,0]
+            target = temp_data['gtarget'].ravel()
+
+
+        data = np.reshape(data, (data.shape[0], data.shape[1], 1)).shape
+
+    return data, target
 
 def load_data_left_right(subject, sensor='both', dlh=0, keep_SH=False, keep_event=True, smote=None):
 
@@ -232,23 +375,50 @@ def load_data_nn(subject, sensor='both', dlh=0, keep_SH=False, return_target=Tru
         return data, False
     '''
 
-def load_general_data_lstm(trains_subjects, holdout_subject, sensor='both', dlh=0, keep_SH=False, keep_event=True, smote=None):
+def load_general_data_lstm(subject, sensor='both', dlh=0, keep_SH=False, keep_event=True, smote=None):
     '''
     Description: Load the data for the general case where the subject is the test data
     '''
 
+    all_subjects = ["1-sf", "10-rc"] #, "12-mb", "17-sb", "19-me", "2-bd", "22-ap", "26-tc", "3-jk",
+                    #  "31-ns", "32-rf", "36-af", "38-cs", "39-dg", "4-rs", "41-pk", "43-cm", "7-sb"]
+
+    train_subjects = [s for s in all_subjects if s != subject]
+
     train_data = []
     train_target = []
-    for tsubject in trains_subjects:
+    for tsubject in train_subjects:
 
         temp_train_data, temp_train_target = create_featured_dataset(tsubject, sensor=sensor, dlh=dlh, keep_SH=keep_SH, keep_event=keep_event, smote=smote)
 
         train_data.append(temp_train_data)
         train_target.append(temp_train_target)
 
-    train_data = np.array(train_data)
-    train_target = np.array(train_target)
-    holdout_data, holdout_target = create_featured_dataset(holdout_subject, sensor=sensor, dlh=dlh, keep_SH=keep_SH, keep_event=keep_event, smote=smote)
+    train_data   = np.vstack(train_data)
+    train_target = np.vstack(train_target)
+    holdout_data, holdout_target = create_featured_dataset(subject, sensor=sensor, dlh=dlh, keep_SH=keep_SH, keep_event=keep_event, smote=smote)
+
+    return train_data, train_target, holdout_data, holdout_target
+
+def load_general_data_nn(subject, sensor='both', dlh=0, keep_SH=False, return_target=True, smote=None):
+
+    all_subjects = ["1-sf", "10-rc",]# "12-mb", "17-sb", "19-me", "2-bd", "22-ap", "26-tc", "3-jk",
+                    #  "31-ns", "32-rf", "36-af", "38-cs", "39-dg", "4-rs", "41-pk", "43-cm", "7-sb"]
+
+    train_subjects = [s for s in all_subjects if s != subject]
+
+    train_data = []
+    train_target = []
+    for tsubject in train_subjects:
+
+        temp_train_data, temp_train_target = load_data_nn(tsubject, sensor=sensor, dlh=dlh, keep_SH=keep_SH, return_target=return_target, smote=smote)
+
+        train_data.append(temp_train_data)
+        train_target.append(temp_train_target)
+
+    train_data   = np.vstack(train_data)
+    train_target = np.vstack(train_target)
+    holdout_data, holdout_target = load_data_nn(subject, sensor=sensor, dlh=dlh, keep_SH=keep_SH, return_target=return_target, smote=smote)
 
     return train_data, train_target, holdout_data, holdout_target
 
