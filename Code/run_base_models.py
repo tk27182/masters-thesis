@@ -117,6 +117,22 @@ elif smote == 'smote':
     y_train = ty_train
     y_val   = ty_val
 
+elif smote == 'downsample':
+
+        # Load the downsampled datasets
+        data, target = dp.load_data_original_nn(mtype=model_type, subject=subject, sensor=sensor, dlh=dlh)
+
+        # Split into train, test, val
+        train_idx, val_idx, test_idx = dp.split_data_cv_indx(data,target)
+
+        train_data = data[train_idx]
+        test_data  = data[test_idx]
+        val_data   = data[val_idx]
+
+        y_train = target[train_idx]
+        y_test  = target[test_idx]
+        y_val   = target[val_idx]
+
 #elif (smote == 'gauss') or (smote == 'smote'):
 #
 #    train_data, test_data, val_data, y_train, y_test, y_val = dp.train_test_val_split(data, target, test_size=0.2, val_size=0.25)
