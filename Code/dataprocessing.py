@@ -112,6 +112,8 @@ def augment_pos_labels(data, target):
 
 def load_data_original_nn(mtype, subject, sensor='both', dlh=0):
 
+    path = '../Data'
+
     if dlh == 0:
         dlh = ''
     else:
@@ -125,7 +127,7 @@ def load_data_original_nn(mtype, subject, sensor='both', dlh=0):
     if mtype == 'general':
 
         # Load general dataset
-        filename = f'generalModelfirstevent--{subject.upper()}--{sensor}subsample_{dlh}12hours_locf'
+        filename = f'{path}/generalModelfirstevent--{subject.upper()}--{sensor}subsample_{dlh}12hours_locf/sampled_data.mat'
         temp_data = sio.loadmat(filename)
 
         data = temp_data['gdata']['data'][0,0]
@@ -134,7 +136,7 @@ def load_data_original_nn(mtype, subject, sensor='both', dlh=0):
     else:
 
         # Load individual dataset
-        filename = f'{subject}_12hours_{sensor}firsteventsubsample_{dlh}locf'
+        filename = f'{path}/{subject}_12hours_{sensor}firsteventsubsample_{dlh}locf/sampled_data.mat'
         temp_data = sio.loadmat(filename)
 
         data = temp_data['tdata']['data'][0,0]
@@ -144,6 +146,7 @@ def load_data_original_nn(mtype, subject, sensor='both', dlh=0):
 
 def load_data_original_featured(mtype, subject, sensor='both', dlh=0):
 
+    path = '../Data'
 
     if dlh == 0:
         dlh = ''
@@ -154,8 +157,8 @@ def load_data_original_featured(mtype, subject, sensor='both', dlh=0):
 
         if mtype == 'general':
 
-            lfilename = f'generalModelfirstevent--{subject.upper()}--left-subsample_{dlh}12hours_locf'
-            rfilename = f'generalModelfirstevent--{subject.upper()}--right-subsample_{dlh}12hours_locf'
+            lfilename = f'{path}/generalModelfirstevent--{subject.upper()}--left-subsample_{dlh}12hours_locf/sampled_data.mat'
+            rfilename = f'{path}/generalModelfirstevent--{subject.upper()}--right-subsample_{dlh}12hours_locf/sampled_data.mat'
 
             left_data  = sio.loadmat(lfilename)
             right_data = sio.loadmat(rfilename)
@@ -168,8 +171,8 @@ def load_data_original_featured(mtype, subject, sensor='both', dlh=0):
 
         else: # Individual
 
-            lfilename = f'{subject}_12hours_left-firsteventsubsample_{dlh}locf'
-            rfilename = f'{subject}_12hours_right-firsteventsubsample_{dlh}locf'
+            lfilename = f'{path}/{subject}_12hours_left-firsteventsubsample_{dlh}locf/sampled_data.mat'
+            rfilename = f'{path}/{subject}_12hours_right-firsteventsubsample_{dlh}locf/sampled_data.mat'
 
             left_data  = sio.loadmat(lfilename)
             right_data = sio.loadmat(rfilename)
@@ -187,14 +190,14 @@ def load_data_original_featured(mtype, subject, sensor='both', dlh=0):
 
         if mtype == 'general':
 
-            filename = f'generalModelfirstevent--{subject.upper()}--{sensor}-subsample_{dlh}12hours_locf'
+            filename = f'{path}/generalModelfirstevent--{subject.upper()}--{sensor}-subsample_{dlh}12hours_locf/sampled_data.mat'
             temp_data = sio.loadmat(filename)
 
             data = temp_data['gdata']['data'][0,0]
             target = temp_data['gtarget'].ravel()
 
         else:
-            filename = f'{subject}_12hours_{sensor}-firsteventsubsample_{dlh}locf'
+            filename = f'{path}/{subject}_12hours_{sensor}-firsteventsubsample_{dlh}locf/sampled_data.mat'
             temp_data = sio.loadmat(filename)
 
             data = temp_data['gdata']['data'][0,0]
