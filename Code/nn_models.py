@@ -8,9 +8,8 @@ Created on Mon Jul 12 17:34:00
 
 import sys
 import scipy.io as sio
+from scipy.stats import multivariate_normal
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib import pyplot
 
 import tensorflow as tf
 
@@ -30,7 +29,7 @@ from tensorflow.keras.models import Model
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelBinarizer, LabelEncoder
-from sklearn.metrics import r2_score, auc, roc_curve, roc_auc_score, log_loss
+from sklearn.metrics import r2_score, auc, roc_curve, roc_auc_score, log_loss, fbeta_score
 
 ################################################################################################################################
 #### Hyper Classes: To pass arguments to the function models ####
@@ -101,7 +100,7 @@ class HyperANN(kt.HyperModel):
 
         if self.binary and (self.num_features == 1):
             print("Binary and Number of Features is 1")
-            model.add(tf.keras.layers.Dense(units=1, activation = 'softmax', name = 'predictions'))
+            model.add(tf.keras.layers.Dense(units=1, activation = 'sigmoid', name = 'predictions'))
         elif self.binary and (self.num_features == 2):
             print(f"Binary and Number of Features is {self.num_features}")
             model.add(tf.keras.layers.Dense(self.num_features, activation='softmax', name = 'predictions'))
@@ -122,8 +121,8 @@ class HyperANN(kt.HyperModel):
                             ]
                         )
 
-        model.build(input_shape =(2535, 48))
-        print(model.summary())
+        # model.build(input_shape =(2535, 48))
+        # print(model.summary())
         return model
 
 class HyperSimpleRNN(kt.HyperModel):
@@ -229,7 +228,7 @@ class HyperLSTMAutoEncoder(kt.HyperModel):
 
     def build(self, hp):
 
-        lstm_dim = hp.Int("units", min_value = 16, max_value=256, step = 2)
+        lstm_dim = hp.Int("units", min_value = 2, max_value=256, step = 2)
 
         autoencoder = tf.keras.models.Sequential()
         #autoencoder.add(tf.keras.Input(shape=(self.time_steps, self.num_features)))
@@ -502,6 +501,56 @@ class myCallback(Callback):
 ################################################################################################################################
 #### AUTOENCODER OBJECTS AND RNN CELL ###
 
+class ThresholdEstimator:
+
+    def __init__(self, mu: float, sigma: float) -> None:
+        self.mu    = mu
+        self.sigma = sigma
+
+    def fit_distribution(self, errors):
+
+        self.mu    = np.mean(errors, axis = 0)
+        self.sigma = np.cov(errors)
+
+        return
+
+    def get_optimal_threshold(self, errors, target):
+
+        # Estimate the normal distribution of the errors
+        #mu_vector  = np.mean(errors, axis = 0)
+        #cov_matrix = np.cov(errors)
+
+        likelihoods = multivariate_normal.pdf(errors, mean=self.mu, cov=self.sigma)
+
+        f_list = []
+        thresholds = np.arange(min(likelihoods), max(likelihoods), 1)
+        for t in thresholds:
+
+            preds = (likelihoods<t).astype(int)
+            f = fbeta_score(target, preds, beta=0.1)
+            f_list.append(f)
+
+        bidx = np.argmax(f_list)
+
+        self.best_threshold = threshold[bidx]
+
+        return
+
+def compress_array(array):
+
+    compressed_array = [array[sample, array.shape[1]-1, :] for sample in range(array.shape[0])]
+    return compressed_array
+
+def reconstruct(model, data, target, threshold=None):
+    reconstructions = model.predict(data)
+    #errors = tf.keras.losses.mae(compress_array(reconstructions), compress_array(data))
+
+    #if threshold is None:
+    #    threshold = get_optimal_threshold(errors, target)
+
+    #preds = predict_scores(model, data, threshold)
+
+    return reconstructions, 1#errors, threshold
 ### From RNN example of how it works
 class MinimalRNNCell(keras.layers.Layer):
 
