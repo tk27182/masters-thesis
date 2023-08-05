@@ -13,6 +13,7 @@ import shutil
 import time
 import resource
 import json
+import re
 from pathlib import Path
 
 import tensorflow as tf
@@ -51,8 +52,10 @@ dlh          = int(data_name[3][-1]) #int(args[4])
 event        = data_name[4] #bool(args[5])
 model_name        = args[3] #args[6]
 binary       = bool(args[4]) #bool(args[7])
+epochs       = re.search('Epochs(\d+)', data_name[6]).group(1)
+CALLBACKS    = data_name[7]
 
-if len(data_name) == 6:
+if len(data_name) == 8:
     smote    = data_name[5]
 else:
     smote    = None
@@ -73,11 +76,16 @@ else:
     loss = 'mean_squared_error'
     num_features = 2
 
+# Epochs
+if epochs != 'Default':
+    MAX_EPOCHS=int(epochs)
+else:
+    MAX_EPOCHS=100
+
 ####################################
 
 ### Set variables
 TIME_STEPS=24
-MAX_EPOCHS=500
 BATCH_SIZE=512
 overwrite=True
 
@@ -93,9 +101,17 @@ model_dict = {'lstm':                 nnm.HyperLSTM(loss=loss, num_features=num_
               }
 
 ### Define early stopping
-early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss',
-                                                    patience=5,
-                                                    mode='min')
+if 'autoencoder' in model_name:
+    early_stopping = tf.keras.callbacks.History()
+    loss = 'mean_squared_error'
+else:
+
+    if CALLBACKS == 'None':
+        early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss',
+                                                        patience=5,
+                                                        mode='min')
+    else:
+        early_stopping = tf.keras.callbacks.History()
 
 ### Define the model to use
 mdl = model_dict[model_name]
@@ -178,9 +194,9 @@ target = np.where(target == 1, 1, 0)
 #target = np.array([np.where(target != 1, 1, 0),
 #                   np.where(target == 1, 1, 0)
 #                    ]).T
+train_idx, val_idx, test_idx = dp.split_data_cv_indx(data,target)
 
 if model_type == 'indv':
-    train_idx, val_idx, test_idx = dp.split_data_cv_indx(data,target)
 
     # Split data into time oriented chunks
     if smote is None:
@@ -282,7 +298,7 @@ if model_type == 'indv':
         test_data  = data[test_idx]
 
 
-    elif smote == 'downsample':
+    elif smote == 'original':
 
         # Load the downsampled datasets
         if ('lstm' in model_name) or ('rnn' in model_name):
@@ -290,6 +306,8 @@ if model_type == 'indv':
 
         else:
             data, target = dp.load_data_original_nn(mtype=model_type, subject=subject, sensor=sensor, dlh=dlh)
+
+        target = np.where(target == 1, 1, 0)
 
         # Split into train, test, val
         train_idx, val_idx, test_idx = dp.split_data_cv_indx(data,target)
@@ -306,16 +324,34 @@ if model_type == 'indv':
     #
     #    train_data, test_data, val_data, y_train, y_test, y_val = dp.train_test_val_split(data, target, test_size=0.2, val_size=0.25)
 
+    elif smote == 'downsample':
+
+        train_data, y_train = dp.downsample(data[train_idx,:], target[train_idx])
+
+        test_data = data[test_idx, :]
+        y_test    = target[test_idx]
+
+        val_data  = data[val_idx, :]
+        y_val     = target[val_idx]
+
     else:
         raise ValueError(f"SMOTE parameter is incorrect. Change this: {smote}")
 
 elif model_type == 'general':
 
-    train_data = data
+    train_data = data[train_idx, :]
+    test_data  = data[test_idx, :]
+    val_data   = data[val_idx, :]
+
+    val_data   = np.vstack((val_data, test_data))
     test_data  = hdata
 
-    train_target = target
-    test_target   = htarget
+    y_train      = target[train_idx]
+    val_target   = target[val_idx]
+    test_target  = target[test_idx]
+
+    y_val    = np.hstack((val_target, test_target))
+    y_test   = htarget
 
 else:
 
@@ -371,7 +407,7 @@ else:
                         project_name=project_name)
 
     # Run the hypertuning search
-    tuner.search(train_data, y_train, epochs=50, validation_data = (val_data, y_val), batch_size=BATCH_SIZE,
+    tuner.search(train_data, y_train, epochs=MAX_EPOCHS, validation_data = (val_data, y_val), batch_size=BATCH_SIZE,
                 callbacks=[early_stopping], class_weight=train_weights)
 
     # Get the optimal hyperparameters
@@ -386,13 +422,15 @@ else:
     # Build the model with the optimal hyperparameters and train it on the data for 50 epochs
     model = tuner.hypermodel.build(best_hps)
 
-    history = model.fit(train_data, y_train, epochs=50, batch_size=BATCH_SIZE,
+    history = model.fit(train_data, y_train, epochs=MAX_EPOCHS, batch_size=BATCH_SIZE,
                         validation_data=(val_data, y_val), class_weight=train_weights)
     print("BEST MODEL SUMMARY: ")
     print(model.summary())
 
-    val_acc_per_epoch = history.history['val_loss']
-    best_epoch = val_acc_per_epoch.index(max(val_acc_per_epoch)) + 1
+    val_loss_per_epoch = history.history['val_loss']
+    best_epoch = val_loss_per_epoch.index(min(val_loss_per_epoch)) + 1
+    if 'autoencoder' in model_name:
+        best_epoch = MAX_EPOCHS
     print('Best epoch: %d' % (best_epoch,))
 
     print(tuner.results_summary())
@@ -428,13 +466,14 @@ else:
     train_data = data[train_idx]
     val_data   = data[val_idx]
 
-    y_train = target[train_idx]
-    y_val   = target[val_idx]
+    y_train = data[train_idx] #target[train_idx]
+    y_val   = data[val_idx] #target[val_idx]
+    y_test  = test_data
 
     # Reconstruct the time series
-    train_scores, threshold = nnm.reconstruct(hypermodel, train_data, threshold=None)
-    test_scores, _          = nnm.reconstruct(hypermodel, test_data, threshold=threshold)
-    val_scores, _           = nnm.reconstruct(hypermodel, val_data, threshold=threshold)
+    y_pred_train, _ = nnm.reconstruct(hypermodel, train_data, threshold=None)
+    y_pred_test, _          = nnm.reconstruct(hypermodel, test_data, threshold=None)
+    y_pred_val, _           = nnm.reconstruct(hypermodel, val_data, threshold=None)
 
 
 # Save the predictions
