@@ -26,6 +26,8 @@ class DataLoader:
         self.binary = binary
 
 
+    #def load_data(self):
+
 
 
 
@@ -234,7 +236,7 @@ def load_data_original_featured(mtype, subject, sensor='both', dlh=0):
             target = temp_data['gtarget'].ravel()
 
         else: # Individual
-            filename = f'{path}/{subject}_12hours_{sensor}-firsteventsubsample_{dlh}locf/sampled_data.mat'
+            filename = f'{path}/{subject}_12hours_{sensor}_firsteventsubsample_{dlh}locf/sampled_data.mat'
             temp_data = sio.loadmat(filename)
 
             data = temp_data['tdata']['data'][0,0]
@@ -465,6 +467,52 @@ def load_general_data_nn(subject, sensor='both', dlh=0, keep_SH=False, return_ta
     train_data   = np.vstack(train_data)
     train_target = np.hstack(train_target)
     holdout_data, _, holdout_target = load_data_nn(subject, sensor=sensor, dlh=dlh, keep_SH=keep_SH, return_target=return_target, smote=smote)
+
+    return train_data, train_target, holdout_data, holdout_target
+
+def load_general_original_nn(mtype, subject, sensor='both', dlh=0):
+
+    all_subjects = ["1-sf", "10-rc", "12-mb", "17-sb", "19-me", "2-bd", "22-ap", "26-tc", "3-jk",
+                     "31-ns", "32-rf", "36-af", "38-cs", "39-dg", "4-rs", "41-pk", "43-cm", "7-sb"]
+
+    train_subjects = [s for s in all_subjects if s != subject]
+
+    train_data = []
+    train_target = []
+    for tsubject in train_subjects:
+
+        temp_train_data, temp_train_target = load_data_original_nn(mtype, tsubject, sensor=sensor, dlh=dlh)
+
+        train_data.append(temp_train_data)
+        train_target.append(temp_train_target)
+
+    train_data   = np.vstack(train_data)
+    train_target = np.hstack(train_target)
+    holdout_data, holdout_target = load_data_original_nn(mtype, subject, sensor=sensor, dlh=dlh)
+
+    return train_data, train_target, holdout_data, holdout_target
+
+def load_general_original_featured(mtype, subject, sensor='both', dlh=0):
+
+    all_subjects = ["1-sf", "10-rc", "12-mb", "17-sb", "19-me", "2-bd", "22-ap", "26-tc", "3-jk",
+                      "31-ns", "32-rf", "36-af", "38-cs", "39-dg", "4-rs", "41-pk", "43-cm", "7-sb"]
+
+    train_subjects = [s for s in all_subjects if s != subject]
+    print(train_subjects)
+
+    train_data = []
+    train_target = []
+    for tsubject in train_subjects:
+
+        temp_train_data, temp_train_target = load_data_original_featured(mtype, tsubject, sensor=sensor, dlh=dlh)
+        print(f"The size of the dataset for {tsubject} is {temp_train_data.shape}")
+        print(f"The size of the target for {tsubject} is {temp_train_target.shape}")
+        train_data.append(temp_train_data)
+        train_target.append(temp_train_target)
+
+    train_data   = np.vstack(train_data)
+    train_target = np.hstack(train_target)
+    holdout_data, holdout_target = load_data_original_featured(mtype, subject, sensor=sensor, dlh=dlh)
 
     return train_data, train_target, holdout_data, holdout_target
 
