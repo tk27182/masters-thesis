@@ -21,9 +21,11 @@ import keras_tuner as kt
 import numpy as np
 import pandas as pd
 from sklearn.utils import class_weight
+from sklearn.metrics import roc_curve, auc, precision_recall_curve
 
 import nn_models as nnm
 import dataprocessing as dp
+import visualization as viz
 
 ### Star the timer
 start_time = time.perf_counter()
@@ -36,6 +38,7 @@ else:
 
 ### Set tensorflow random seed for reporducibility
 tf.random.set_seed(0)
+np.random.seed(0)
 
 ### Get the arguments
 args = sys.argv[1:]
@@ -82,6 +85,19 @@ if epochs != 'Default':
 else:
     MAX_EPOCHS=100
 
+# Input bias
+bias = None
+if bias is not None:
+    N = 47596
+    pos = 129
+    neg = N - pos
+    input_bias = np.log(pos/neg)
+
+    input_bias = tf.keras.initializers.Constant(input_bias)
+    print(input_bias)
+else:
+    input_bias = None
+print("The type of input_bias is: ", type(input_bias))
 ####################################
 
 ### Set variables
@@ -96,7 +112,10 @@ model_dict = {'lstm':                 nnm.HyperLSTM(loss=loss, num_features=num_
               'deeplstm-autoencoder': nnm.HyperDeepLSTMAutoEncoder(loss=loss, time_steps=TIME_STEPS, num_features=num_features),
               'ann':                  nnm.HyperANN(loss=loss, num_features=num_features, binary=binary),
               'simplernn':            nnm.HyperSimpleRNN(loss=loss, num_features=num_features, binary=binary),
-              'autoencoder':          nnm.HyperAutoencoder(loss=loss, num_features=num_features, binary=binary)
+              'autoencoder':          nnm.HyperAutoencoder(loss=loss, num_features=num_features, binary=binary),
+              'test-ann':             nnm.TestHyperANN(loss=loss, num_features=num_features, binary=binary),
+              'test-lstm':            nnm.TestHyperLSTM(loss=loss, num_features=num_features, binary=binary),
+              'test-lr':              nnm.TestLR(loss=loss, num_features=num_features, binary=binary,output_bias=input_bias)
               #'randomforest':     nnm.HyperRandomForest()
               }
 
@@ -199,7 +218,7 @@ train_idx, val_idx, test_idx = dp.split_data_cv_indx(data,target)
 if model_type == 'indv':
 
     # Split data into time oriented chunks
-    if smote is None:
+    if smote == "None":
 
         # Don't split the data the same way for the autoencoder
         if 'autoencoder' not in model_name:
@@ -339,19 +358,30 @@ if model_type == 'indv':
 
 elif model_type == 'general':
 
-    train_data = data[train_idx, :]
-    test_data  = data[test_idx, :]
-    val_data   = data[val_idx, :]
+    if smote == "None":
+        train_data = data[train_idx, :]
+        test_data  = data[test_idx, :]
+        val_data   = data[val_idx, :]
 
-    val_data   = np.vstack((val_data, test_data))
-    test_data  = hdata
+        val_data   = np.vstack((val_data, test_data))
+        test_data  = hdata
 
-    y_train      = target[train_idx]
-    val_target   = target[val_idx]
-    test_target  = target[test_idx]
+        y_train      = target[train_idx]
+        val_target   = target[val_idx]
+        test_target  = target[test_idx]
 
-    y_val    = np.hstack((val_target, test_target))
-    y_test   = htarget
+        y_val    = np.hstack((val_target, test_target))
+        y_test   = htarget
+
+    elif smote == 'downsample':
+
+        train_data, y_train = dp.downsample(data[train_idx,:], target[train_idx])
+
+        test_data = data[test_idx, :]
+        y_test    = target[test_idx]
+
+        val_data  = data[val_idx, :]
+        y_val     = target[val_idx]
 
 else:
 
@@ -399,16 +429,17 @@ if best_model_path.exists() and not overwrite:
 else:
 
     tuner = kt.Hyperband(mdl,
-                        objective='val_loss',
+                        objective=kt.Objective(name='val_loss', direction='min'),
                         max_epochs=MAX_EPOCHS,
                         factor=10,
+                        seed = 8476823,
                         overwrite=overwrite,
                         directory=directory,
                         project_name=project_name)
 
     # Run the hypertuning search
     tuner.search(train_data, y_train, epochs=MAX_EPOCHS, validation_data = (val_data, y_val), batch_size=BATCH_SIZE,
-                callbacks=[early_stopping], class_weight=train_weights)
+                callbacks=[early_stopping]) #, class_weight=train_weights)
 
     # Get the optimal hyperparameters
     best_hps=tuner.get_best_hyperparameters(num_trials=1)[0]
@@ -423,7 +454,7 @@ else:
     model = tuner.hypermodel.build(best_hps)
 
     history = model.fit(train_data, y_train, epochs=MAX_EPOCHS, batch_size=BATCH_SIZE,
-                        validation_data=(val_data, y_val), class_weight=train_weights)
+                        validation_data=(val_data, y_val)) #, class_weight=train_weights)
     print("BEST MODEL SUMMARY: ")
     print(model.summary())
 
@@ -440,11 +471,15 @@ else:
     #hypermodel.save(best_model_path)
 
     # Retrain the model using the best epoch
-    hypermodel.fit(train_data, y_train, epochs=best_epoch, batch_size=BATCH_SIZE,
-                        validation_data=(val_data, y_val), class_weight=train_weights)
+    history = hypermodel.fit(train_data, y_train, epochs=MAX_EPOCHS, batch_size=BATCH_SIZE,
+                        validation_data=(val_data, y_val)) #, class_weight=train_weights)
+
+    viz.plot_loss(history.history['loss'], history.history['val_loss'], 'Test LSTM Loss Results', "test_loss_lstm_loss.png")
+    viz.plot_loss(history.history['recall'], history.history['val_recall'], 'Test LSTM Recall Results', "test_loss_lstm_recall.png")
+
 
     ### Stop hypertuning and save
-    hypermodel.save(best_model_path)
+    # hypermodel.save(best_model_path)
 
     ### Remove all trials ###
     trial_path = Path(f"{directory}/{project_name}")
@@ -475,6 +510,20 @@ else:
     y_pred_test, _          = nnm.reconstruct(hypermodel, test_data, threshold=None)
     y_pred_val, _           = nnm.reconstruct(hypermodel, val_data, threshold=None)
 
+
+# Plot the AU-ROC and AU-PRC
+train_fpr, train_tpr, train_thresh = roc_curve(y_train, y_pred_train, pos_label=1)
+val_fpr, val_tpr, val_thresh       = roc_curve(y_val, y_pred_val, pos_label=1)
+test_fpr, test_tpr, test_thresh    = roc_curve(y_test, y_pred_test, pos_label=1)
+
+train_ppr, train_rec, train_pthresh = precision_recall_curve(y_train, y_pred_train, pos_label=1)
+val_ppr, val_rec, val_pthresh       = precision_recall_curve(y_val, y_pred_val, pos_label=1)
+test_ppr, test_rec, test_pthresh    = precision_recall_curve(y_test, y_pred_test, pos_label=1)
+
+
+
+viz.plot_roc_curve(train_tpr, train_fpr, val_tpr, val_fpr, test_tpr, test_fpr, title = "Metrics for Test LSTM", save_name="test_loss_lstm_metrics.png")
+viz.plot_prc_curve(train_rec, train_ppr, val_rec, val_ppr, test_rec, test_ppr, title = 'Metrics for Test LSTM', save_name ="test_prc_lstm_metrics.png")
 
 # Save the predictions
 filename = Path(f"../Results/{directory}/{'_'.join(data_name)}/{model_name}_results/")
