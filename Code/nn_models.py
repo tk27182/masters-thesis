@@ -33,6 +33,165 @@ from sklearn.metrics import r2_score, auc, roc_curve, roc_auc_score, log_loss, f
 
 ################################################################################################################################
 #### Hyper Classes: To pass arguments to the function models ####
+class TestHyperLSTMRegression(kt.HyperModel):
+
+    def __init__(self, loss='mean_squared_error', num_features=2, binary=False):
+        super(TestHyperLSTM, self).__init__()
+        self.loss         = loss
+        self.num_features = num_features
+        self.binary       = binary
+
+    def build(self, hp):
+
+        model = tf.keras.Sequential()
+
+        hp_units = 64 #hp.Int(f'units-{1}', min_value=10, max_value=256, step=5)
+        model.add(tf.keras.layers.LSTM(units=hp_units, return_sequences=False,
+                                        name = f'LSTM-layer'))
+
+        # Output layer
+        model.add(tf.keras.layers.Dense(units=1, activation = 'linear', name = 'predictions'))
+
+        # Tune the learning rate
+        hp_learning_rate = hp.Choice('learning_rate', values=[1e-6, 1e-5, 1e-4, 1e-3])
+
+        model.compile(optimizer=keras.optimizers.Adam(learning_rate=hp_learning_rate), \
+                        loss = self.loss,
+                        metrics = [
+                            keras.metrics.BinaryAccuracy(name='accuracy'),
+                            keras.metrics.Precision(name='precision'),
+                            keras.metrics.Recall(name='recall'),
+                            keras.metrics.AUC(name='auc'),
+                            keras.metrics.AUC(name='prc', curve='PR') ]
+                        )
+
+        return model
+
+class TestHyperLSTM(kt.HyperModel):
+
+    def __init__(self, loss='binary_crossentropy', num_features=2, binary=True):
+        super(TestHyperLSTM, self).__init__()
+        self.loss         = loss
+        self.num_features = num_features
+        self.binary       = binary
+
+    def build(self, hp):
+
+        model = tf.keras.Sequential()
+
+        hp_units = 12 #hp.Int(f'units-{1}', min_value=10, max_value=256, step=5)
+        model.add(tf.keras.layers.LSTM(units=hp_units, return_sequences=False,
+                                        name = f'LSTM-layer'))
+
+        # Output layer
+        model.add(tf.keras.layers.Dense(units=1, activation = 'sigmoid', name = 'predictions'))
+
+        # Tune the learning rate
+        hp_learning_rate = hp.Choice('learning_rate', values=[1e-6, 1e-5, 1e-4, 1e-3])
+
+        model.compile(optimizer=keras.optimizers.Adam(learning_rate=hp_learning_rate), \
+                        loss = self.loss,
+                        metrics = [
+                            keras.metrics.BinaryAccuracy(name='accuracy'),
+                            keras.metrics.Precision(name='precision'),
+                            keras.metrics.Recall(name='recall'),
+                            keras.metrics.AUC(name='auc'),
+                            keras.metrics.AUC(name='prc', curve='PR') ]
+                        )
+
+        return model
+
+
+class TestLR(kt.HyperModel):
+
+    def __init__(self, loss, num_features, binary, output_bias):
+        super(TestLR, self).__init__()
+        self.loss         = loss
+        self.num_features = num_features
+        self.binary       = binary
+        self.output_bias  = output_bias
+
+    def build(self, hp):
+
+        print("The type of input_bias inside the model is: ", type(self.output_bias))
+
+        # Initialize the hyperparameters
+        model = keras.Sequential()
+
+        model.add(tf.keras.layers.Dense(units=1, activation='sigmoid', kernel_regularizer=keras.regularizers.l2(0.), bias_initializer=self.output_bias))
+
+        # Tune the learning rate
+        hp_learning_rate = hp.Choice('learning_rate', values=[1e-6, 1e-5, 1e-4, 1e-3])
+
+        model.compile(optimizer=tf.keras.optimizers.SGD(learning_rate=hp_learning_rate), \
+                        loss = self.loss,
+                        metrics = [
+                            tf.keras.metrics.BinaryAccuracy(name='accuracy'),
+                            tf.keras.metrics.Precision(name='precision'),
+                            tf.keras.metrics.Recall(name='recall'),
+                            tf.keras.metrics.AUC(name='auc'),
+                            tf.keras.metrics.AUC(name='prc', curve='PR')
+                            ]
+                        )
+
+        return model
+
+
+class TestHyperANN(kt.HyperModel):
+
+    def __init__(self, loss, num_features, binary):
+        super(TestHyperANN, self).__init__()
+        self.loss         = loss
+        self.num_features = num_features
+        self.binary       = binary
+
+    def build(self, hp):
+
+        # Initialize the hyperparameters
+        model = keras.Sequential()
+        #model.add(keras.layers.Input())
+        # Tune the number of hidden layers
+
+
+        # Tune the number of nodes in the hidden layers
+        # Choose an optimal value between 10 and 80
+        hp_units = 8 #hp.Int(f'units-{i}', min_value=5, max_value=80, step=2)
+
+        # model.add(keras.layers.Dense(units=hp_units, activation = 'relu'))
+        # model.add(tf.keras.layers.Dropout(0.2))
+
+        # Add dropout layer
+        # hp_dropout_frac = hp.Float(f'dropout-{i}', min_value=0, max_value=0.5, step=0.05)
+        # model.add(tf.keras.layers.Dropout(hp_dropout_frac))
+
+        model.add(tf.keras.layers.Dense(units=1, activation='sigmoid'))
+
+        # if self.binary and (self.num_features == 1):
+        #     print("Binary and Number of Features is 1")
+        #     model.add(tf.keras.layers.Dense(units=1, activation = 'sigmoid', name = 'predictions'))
+        # elif self.binary and (self.num_features == 2):
+        #     print(f"Binary and Number of Features is {self.num_features}")
+        #     model.add(tf.keras.layers.Dense(self.num_features, activation='softmax', name = 'predictions'))
+        # else:
+        #     model.add(tf.keras.layers.Dense(self.num_features, activation='linear', name = 'predictions'))
+
+        # Tune the learning rate
+        hp_learning_rate = hp.Choice('learning_rate', values=[1e-3])
+
+        model.compile(optimizer=keras.optimizers.Adam(learning_rate=hp_learning_rate), \
+                        loss = self.loss,
+                        metrics = [
+                            tf.keras.metrics.BinaryAccuracy(name='accuracy'),
+                            tf.keras.metrics.Precision(name='precision'),
+                            tf.keras.metrics.Recall(name='recall'),
+                            tf.keras.metrics.AUC(name='auc'),
+                            tf.keras.metrics.AUC(name='prc', curve='PR')
+                            ]
+                        )
+
+        # model.build(input_shape =(2535, 48))
+        # print(model.summary())
+        return model
 
 class HyperAutoencoder(kt.HyperModel):
 
@@ -87,11 +246,11 @@ class HyperANN(kt.HyperModel):
         model = keras.Sequential()
         #model.add(keras.layers.Input())
         # Tune the number of hidden layers
-        for i in range(hp.Int("hidden_layers", min_value=1, max_value=5, step=1)):
+        for i in range(hp.Int("hidden_layers", min_value=1, max_value=3, step=1)):
 
             # Tune the number of nodes in the hidden layers
             # Choose an optimal value between 10 and 80
-            hp_units = hp.Int(f'units-{i}', min_value=5, max_value=80, step=2)
+            hp_units = hp.Int(f'units-{i}', min_value=4, max_value=64, step=2)
             model.add(keras.layers.Dense(units=hp_units, activation = 'relu'))
 
             # Add dropout layer
@@ -108,7 +267,7 @@ class HyperANN(kt.HyperModel):
             model.add(tf.keras.layers.Dense(self.num_features, activation='linear', name = 'predictions'))
 
         # Tune the learning rate
-        hp_learning_rate = hp.Choice('learning_rate', values=[1e-4, 5e-4, 1e-3, 2e-3, 5e-3])
+        hp_learning_rate = hp.Choice('learning_rate', values=[1e-6, 1e-5, 1e-4, 1e-3])
 
         model.compile(optimizer=keras.optimizers.Adam(learning_rate=hp_learning_rate), \
                         loss = self.loss,
@@ -137,10 +296,10 @@ class HyperSimpleRNN(kt.HyperModel):
         model = tf.keras.models.Sequential()
         # Tune the number of hidden layers
         #for i in range(hp.Int("hidden_layers", min_value=1, max_value=5, step=1)):
-        for i in range(hp.Int("hidden_layers", min_value=0, max_value=5, step=1)):
+        for i in range(hp.Int("hidden_layers", min_value=1, max_value=3, step=1)):
             # Tune the number of nodes in the hidden layers
             # Choose an optimal value between 10 and 80
-            hp_units = hp.Int(f'units-{i}', min_value=10, max_value=256, step=5)
+            hp_units = hp.Int(f'units-{i}', min_value=4, max_value=64, step=2)
             model.add(tf.keras.layers.SimpleRNN(units=hp_units, return_sequences=True,
                                             name = f'rnn-layer-{i}'))
             # Add dropout layer
@@ -165,7 +324,7 @@ class HyperSimpleRNN(kt.HyperModel):
             model.add(tf.keras.layers.Dense(self.num_features, activation='linear', name = 'predictions'))
 
         # Tune the learning rate
-        hp_learning_rate = hp.Choice('learning_rate', values=[1e-4, 5e-4, 1e-3, 2e-3, 5e-3])
+        hp_learning_rate = hp.Choice('learning_rate', values=[1e-6, 1e-5, 1e-4, 1e-3])
 
         model.compile(optimizer=keras.optimizers.Adam(learning_rate=hp_learning_rate), \
                         loss = self.loss,
@@ -263,14 +422,14 @@ class HyperLSTM(kt.HyperModel):
 
         # Tune the number of hidden layers
         #for i in range(hp.Int("hidden_layers", min_value=1, max_value=5, step=1)):
-        for i in range(hp.Int("hidden_layers", min_value=0, max_value=5, step=1)):
+        for i in range(hp.Int("hidden_layers", min_value=1, max_value=3, step=1)):
             # Tune the number of nodes in the hidden layers
             #if i == 4: # max_values - 1
             #    return_sequences = False
             #else:
             #    return_sequences = True
             # Choose an optimal value between 10 and 80
-            hp_units = hp.Int(f'units-{i}', min_value=10, max_value=256, step=5)
+            hp_units = hp.Int(f'units-{i}', min_value=4, max_value=64, step=2)
             model.add(tf.keras.layers.LSTM(units=hp_units, return_sequences=True,
                                             name = f'LSTM-layer-{i}'))
             # Add dropout layer
@@ -287,7 +446,7 @@ class HyperLSTM(kt.HyperModel):
             model.add(tf.keras.layers.Dense(self.num_features, activation='softmax', name = 'predictions'))
 
         # Tune the learning rate
-        hp_learning_rate = hp.Choice('learning_rate', values=[1e-4, 5e-4, 1e-3, 2e-3, 5e-3])
+        hp_learning_rate = hp.Choice('learning_rate', values=[1e-6, 1e-5, 1e-4, 1e-3])
 
         model.compile(optimizer=keras.optimizers.Adam(learning_rate=hp_learning_rate), \
                         loss = self.loss,
@@ -316,14 +475,14 @@ class HyperStatefulLSTM(kt.HyperModel):
 
         # Tune the number of hidden layers
         #for i in range(hp.Int("hidden_layers", min_value=1, max_value=5, step=1)):
-        for i in range(hp.Int("hidden_layers", min_value=0, max_value=5, step=1)):
+        for i in range(hp.Int("hidden_layers", min_value=1, max_value=3, step=1)):
             # Tune the number of nodes in the hidden layers
             #if i == 4: # max_values - 1
             #    return_sequences = False
             #else:
             #    return_sequences = True
             # Choose an optimal value between 10 and 80
-            hp_units = hp.Int(f'units-{i}', min_value=10, max_value=256, step=5)
+            hp_units = hp.Int(f'units-{i}', min_value=4, max_value=64, step=2)
             model.add(tf.keras.layers.LSTM(units=hp_units, return_sequences=True, stateful=True,
                                             name = f'LSTM-layer-{i}'))
             # Add dropout layer
@@ -340,7 +499,7 @@ class HyperStatefulLSTM(kt.HyperModel):
             model.add(tf.keras.layers.Dense(self.num_features, activation='softmax', name = 'predictions'))
 
         # Tune the learning rate
-        hp_learning_rate = hp.Choice('learning_rate', values=[1e-4, 5e-4, 1e-3, 2e-3, 5e-3])
+        hp_learning_rate = hp.Choice('learning_rate', values=[1e-6, 1e-5, 1e-4, 1e-3])
 
         model.compile(optimizer=keras.optimizers.Adam(learning_rate=hp_learning_rate), \
                         loss = self.loss,
@@ -367,10 +526,10 @@ class HyperBiLSTM(kt.HyperModel):
         model = tf.keras.models.Sequential()
         # Tune the number of hidden layers
         #for i in range(hp.Int("hidden_layers", min_value=1, max_value=5, step=1)):
-        for i in range(hp.Int("hidden_layers", min_value=0, max_value=5, step=1)):
+        for i in range(hp.Int("hidden_layers", min_value=1, max_value=3, step=1)):
             # Tune the number of nodes in the hidden layers
             # Choose an optimal value between 10 and 80
-            hp_units = hp.Int(f'units-{i}', min_value=10, max_value=256, step=5)
+            hp_units = hp.Int(f'units-{i}', min_value=4, max_value=64, step=2)
             model.add(tf.keras.layers.Bidirectional(
                         tf.keras.layers.LSTM(units=hp_units, return_sequences=True,
                                             name = f'LSTM-layer-{i}')))
@@ -386,7 +545,7 @@ class HyperBiLSTM(kt.HyperModel):
             model.add(tf.keras.layers.Dense(self.num_features, name = 'predictions'))
 
         # Tune the learning rate
-        hp_learning_rate = hp.Choice('learning_rate', values=[1e-4, 5e-4, 1e-3, 2e-3, 5e-3])
+        hp_learning_rate = hp.Choice('learning_rate', values=[1e-6, 1e-5, 1e-4, 1e-3])
 
         model.compile(optimizer=keras.optimizers.Adam(learning_rate=hp_learning_rate), \
                         loss = self.loss,

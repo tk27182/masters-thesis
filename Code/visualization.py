@@ -153,6 +153,10 @@ def plot_roc_curve(train_tpr, train_fpr, val_tpr, val_fpr, test_tpr, test_fpr, t
 
     ax.legend(loc = 'right')
 
+    # Save the plot
+    if save_name is not None:
+        fig.savefig(save_name, dpi = 300, bbox_inches = 'tight')
+
     return ax
 
 def plot_prc_curve(train_rec, train_ppv, val_rec, val_ppv, test_rec, test_ppv, title = '', save_name = None):
@@ -176,4 +180,10 @@ def plot_prc_curve(train_rec, train_ppv, val_rec, val_ppv, test_rec, test_ppv, t
 
     ax.legend(loc = 'lower right')
 
+    # Save the plot
+    if save_name is not None:
+        fig.savefig(save_name, dpi = 300, bbox_inches = 'tight')
+
     return ax
+
+#def plot_auc_results(df, )

@@ -11,9 +11,11 @@ from sklearn.utils import class_weight
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import GridSearchCV, RepeatedStratifiedKFold, PredefinedSplit
+from sklearn.metrics import roc_curve
 
 import dataprocessing as dp
 import nn_models as nnm
+import visualization as viz
 
 ### Start time
 start_time = time.perf_counter()
@@ -39,7 +41,7 @@ event        = data_name[4] #bool(args[5])
 model_name        = args[3] #args[6]
 binary       = bool(args[4]) #bool(args[7])
 
-if len(data_name) == 6:
+if len(data_name) == 8:
     smote    = data_name[5]
 else:
     smote    = None
@@ -65,7 +67,11 @@ else:
 
 # Classification
 if event:
-    data, varnames, target = dp.load_data_nn(subject, sensor=sensor, dlh=dlh, keep_SH=False, return_target=event, smote=None)
+
+    if model_type == 'indv':
+        data, varnames, target = dp.load_data_nn(subject, sensor=sensor, dlh=dlh, keep_SH=False, return_target=event, smote=None)
+    else:
+        data, target, hdata, htarget = dp.load_general_data_nn(subject, sensor=sensor, dlh=dlh, keep_SH=False, return_target=event, smote=None)
     print("Shape of analytical dataset is: ", data.shape)
     print("The target is shaped: ", target.shape)
 # Regression
@@ -79,66 +85,121 @@ target = np.where(target == 1, 1, 0)
 
 train_idx, val_idx, test_idx = dp.split_data_cv_indx(data,target)
 # Split data into time oriented chunks
-if smote is None:
-
-    train_data = data[train_idx]
-    y_train    = target[train_idx]#.reshape((-1,1))
-
-    val_data   = data[val_idx]
-    y_val      = target[val_idx]#.reshape((-1,1))
-
-    test_data  = data[test_idx]
-    y_test     = target[test_idx]#.reshape((-1,1))
-
-elif smote == 'gauss':
-
-    y_train    = target[train_idx]#.reshape((-1,1))
-    y_val      = target[val_idx]#.reshape((-1,1))
-    y_test     = target[test_idx]#.reshape((-1,1))
-
-    train_data, ty_train = dp.add_gaussian_noise(data[train_idx], y_train)
-    val_data, ty_val     = dp.add_gaussian_noise(data[val_idx], y_val)
-    test_data  = data[test_idx]
-
-    y_train = ty_train
-    y_val   = ty_val
-
-
-elif smote == 'smote':
-
-    y_train    = target[train_idx]#.reshape((-1,1))
-    y_val      = target[val_idx]#.reshape((-1,1))
-    y_test     = target[test_idx]#.reshape((-1,1))
-
-    train_data, ty_train = dp.augment_pos_labels(data[train_idx], y_train)
-    val_data, ty_val     = dp.augment_pos_labels(data[val_idx], y_val)
-    test_data  = data[test_idx]
-
-    y_train = ty_train
-    y_val   = ty_val
-
-elif smote == 'downsample':
-
-        # Load the downsampled datasets
-        data, target = dp.load_data_original_nn(mtype=model_type, subject=subject, sensor=sensor, dlh=dlh)
-
-        # Split into train, test, val
-        train_idx, val_idx, test_idx = dp.split_data_cv_indx(data,target)
+if model_type == 'indv':
+    if smote == 'None':
 
         train_data = data[train_idx]
-        test_data  = data[test_idx]
+        y_train    = target[train_idx]#.reshape((-1,1))
+
         val_data   = data[val_idx]
+        y_val      = target[val_idx]#.reshape((-1,1))
 
-        y_train = target[train_idx]
-        y_test  = target[test_idx]
-        y_val   = target[val_idx]
+        test_data  = data[test_idx]
+        y_test     = target[test_idx]#.reshape((-1,1))
 
-#elif (smote == 'gauss') or (smote == 'smote'):
-#
-#    train_data, test_data, val_data, y_train, y_test, y_val = dp.train_test_val_split(data, target, test_size=0.2, val_size=0.25)
+    elif smote == 'gauss':
 
-else:
-    raise ValueError(f"SMOTE parameter is incorrect. Change this: {smote}")
+        y_train    = target[train_idx]#.reshape((-1,1))
+        y_val      = target[val_idx]#.reshape((-1,1))
+        y_test     = target[test_idx]#.reshape((-1,1))
+
+        train_data, ty_train = dp.add_gaussian_noise(data[train_idx], y_train)
+        val_data, ty_val     = dp.add_gaussian_noise(data[val_idx], y_val)
+        test_data  = data[test_idx]
+
+        y_train = ty_train
+        y_val   = ty_val
+
+
+    elif smote == 'smote':
+
+        y_train    = target[train_idx]#.reshape((-1,1))
+        y_val      = target[val_idx]#.reshape((-1,1))
+        y_test     = target[test_idx]#.reshape((-1,1))
+
+        train_data, ty_train = dp.augment_pos_labels(data[train_idx], y_train)
+        val_data, ty_val     = dp.augment_pos_labels(data[val_idx], y_val)
+        test_data  = data[test_idx]
+
+        y_train = ty_train
+        y_val   = ty_val
+
+    elif smote == 'original':
+
+            # Load the downsampled datasets
+            data, target = dp.load_data_original_nn(mtype=model_type, subject=subject, sensor=sensor, dlh=dlh)
+
+            target = np.where(target == 1, 1, 0)
+
+            # Split into train, test, val
+            train_idx, val_idx, test_idx = dp.split_data_cv_indx(data,target)
+
+            train_data = data[train_idx]
+            test_data  = data[test_idx]
+            val_data   = data[val_idx]
+
+            y_train = target[train_idx]
+            y_test  = target[test_idx]
+            y_val   = target[val_idx]
+
+    elif smote == 'downsample':
+
+            train_data, y_train = dp.downsample(data[train_idx,:], target[train_idx])
+
+            test_data = data[test_idx]
+            y_test    = target[test_idx]
+
+            val_data  = data[val_idx]
+            y_val     = target[val_idx]
+
+    #elif (smote == 'gauss') or (smote == 'smote'):
+    #
+    #    train_data, test_data, val_data, y_train, y_test, y_val = dp.train_test_val_split(data, target, test_size=0.2, val_size=0.25)
+
+    else:
+        raise ValueError(f"SMOTE parameter is incorrect. Change this: {smote}")
+
+elif model_type == 'general':
+    print(smote)
+    if smote == "None":
+        train_data = data[train_idx, :]
+        test_data  = data[test_idx, :]
+        val_data   = data[val_idx, :]
+
+        val_data   = np.vstack((val_data, test_data))
+        test_data  = hdata
+
+        y_train      = target[train_idx]
+        val_target   = target[val_idx]
+        test_target  = target[test_idx]
+
+        y_val    = np.hstack((val_target, test_target))
+        y_test   = htarget
+
+    elif smote == 'downsample':
+
+        train_data, y_train = dp.downsample(data[train_idx,:], target[train_idx])
+
+        test_data = data[test_idx, :]
+        y_test    = target[test_idx]
+
+        val_data  = data[val_idx, :]
+        y_val     = target[val_idx]
+
+print("Data shapes:")
+print(train_data.shape)
+print(val_data.shape)
+print(test_data.shape)
+
+print("Target shapes:")
+print(y_train.shape)
+print(y_val.shape)
+print(y_test.shape)
+
+print("Postive values")
+print("Train: ", np.sum(y_train == 1))
+print("Val: ", np.sum(y_val == 1))
+print("Test: ", np.sum(y_test == 1))
 
 # Use indices to make PredefinedSplit for hyperparameter optimization
 train_idx = np.full( (train_data.shape[0],) , -1, dtype=int)
@@ -204,10 +265,10 @@ else:
 
     ### Create model dictionary
     rfc = RandomForestClassifier(class_weight=train_weights, random_state=42)
-    lrc = LogisticRegression(class_weight=train_weights, random_state=42)
+    lrc = LogisticRegression(class_weight=train_weights, solver = 'sag', random_state=42, max_iter=100)
 
-    model_dict = {'randomforest': GridSearchCV(rfc, param_grid=rf_param_grid, cv = ps, scoring='roc_auc_ovr_weighted', verbose=3),
-                'lr': GridSearchCV(lrc, param_grid=lr_param_grid, cv = ps, scoring='roc_auc_ovr_weighted', verbose=3)
+    model_dict = {'randomforest': GridSearchCV(rfc, param_grid=rf_param_grid, cv = ps, scoring='neg_log_loss', verbose=3), #roc_auc_ovr_weighted
+                'lr': GridSearchCV(lrc, param_grid=lr_param_grid, cv = ps, scoring='neg_log_loss', verbose=3) #
                 }
 
     clf = model_dict[model_name]
@@ -227,6 +288,15 @@ print("Best parameters: ", clf.best_params_)
 train_preds = clf.predict_proba(train_data)
 test_preds  = clf.predict_proba(test_data)
 val_preds   = clf.predict_proba(val_data)
+
+
+# Plot the AU-ROC and AU-PRC
+train_fpr, train_tpr, train_thresh = roc_curve(y_train, train_preds[:,1], pos_label=1)
+val_fpr, val_tpr, val_thresh       = roc_curve(y_val, val_preds[:,1], pos_label=1)
+test_fpr, test_tpr, test_thresh    = roc_curve(y_test, test_preds[:,1], pos_label=1)
+
+viz.plot_roc_curve(train_tpr, train_fpr, val_tpr, val_fpr, test_tpr, test_fpr, title = "Metrics for Test Random Forest", save_name="test_base_rf_metrics.png")
+
 
 # Save the predictions
 filename = Path(f"../Results/{directory}/{'_'.join(data_name)}/{model_name}_results/")
