@@ -373,6 +373,28 @@ elif model_type == 'general':
         y_val    = np.hstack((val_target, test_target))
         y_test   = htarget
 
+    elif smote == 'original':
+
+        # Load the downsampled datasets
+        if ('lstm' in model_name) or ('rnn' in model_name):
+            data, target = dp.load_general_original_featured(mtype=model_type, subject=subject, sensor=sensor, dlh=dlh)
+
+        else:
+            data, target = dp.load_general_original_nn(mtype=model_type, subject=subject, sensor=sensor, dlh=dlh)
+
+        target = np.where(target == 1, 1, 0)
+
+        # Split into train, test, val
+        train_idx, val_idx, test_idx = dp.split_data_cv_indx(data,target)
+
+        train_data = data[train_idx]
+        test_data  = data[test_idx]
+        val_data   = data[val_idx]
+
+        y_train = target[train_idx]
+        y_test  = target[test_idx]
+        y_val   = target[val_idx]
+
     elif smote == 'downsample':
 
         train_data, y_train = dp.downsample(data[train_idx,:], target[train_idx])
@@ -382,6 +404,9 @@ elif model_type == 'general':
 
         val_data  = data[val_idx, :]
         y_val     = target[val_idx]
+
+    else:
+        raise ValueError(f"SMOTE parameter is incorrect. Change this: {smote}")
 
 else:
 
