@@ -15,6 +15,36 @@ from sklearn.model_selection import train_test_split
 
 pd.options.mode.chained_assignment = None
 
+class DataLoader:
+
+    def __init__(self, model_type, subject, sensor, dlh, event, binary):
+        self.model_type = model_type
+        self.subject = subject
+        self.sensor = sensor
+        self.dlh = dlh
+        self.event = event
+        self.binary = binary
+
+
+
+
+
+def downsample(train_data, train_target):
+
+    # Randomly select zero events 4x the number of positive cases
+    pos_idx = np.where(train_target == 1)[0]
+    neg_idx = np.where(train_target != 1)[0]
+
+    neg_rows = np.random.choice(neg_idx, size=4*len(pos_idx), replace = False)
+
+    use_idx = np.hstack((neg_rows, pos_idx))
+    np.random.shuffle(use_idx)
+
+    new_train_data = train_data[use_idx, :]
+    new_train_target = train_target[use_idx]
+
+    return new_train_data, new_train_target
+
 def process_autoencoder(X_train, X_test, X_val, y_train, y_test, y_val):
 
     train_labels = y_train.astype(bool)
@@ -112,7 +142,7 @@ def augment_pos_labels(data, target):
 
 def load_data_original_nn(mtype, subject, sensor='both', dlh=0):
 
-    path = '../Data'
+    path = '/Users/kirsh012/Box/2019_5_1_data_for_sisi/Data/' #'../Data'
 
     if dlh == 0:
         dlh = ''
@@ -146,7 +176,7 @@ def load_data_original_nn(mtype, subject, sensor='both', dlh=0):
 
 def load_data_original_featured(mtype, subject, sensor='both', dlh=0):
 
-    path = '../Data'
+    path = '/Users/kirsh012/Box/2019_5_1_data_for_sisi/Data/' #'../Data'
 
     if dlh == 0:
         dlh = ''
@@ -157,34 +187,41 @@ def load_data_original_featured(mtype, subject, sensor='both', dlh=0):
 
         if mtype == 'general':
 
-            lfilename = f'{path}/generalModelfirstevent--{subject.upper()}--left-subsample_{dlh}12hours_locf/sampled_data.mat'
-            rfilename = f'{path}/generalModelfirstevent--{subject.upper()}--right-subsample_{dlh}12hours_locf/sampled_data.mat'
+            filename = f'{path}/generalModelfirstevent--{subject.upper()}--subsample_{dlh}12hours_locf/sampled_data.mat'
 
-            left_data  = sio.loadmat(lfilename)
-            right_data = sio.loadmat(rfilename)
+            full_data  = sio.loadmat(filename)
 
-            ldata = left_data['gdata']['data'][0,0]
-            rdata = right_data['gdata']['data'][0,0]
+            gdata = full_data['gdata']['data'][0,0]
+            varnames = full_data['gdata']['varnames'][0,0].ravel()
+            target = full_data['gtarget'].ravel()
 
-            ltarget = left_data['gtarget'].ravel()
-            rtarget = right_data['gtarget'].ravel()
+            vnames = np.array([v[0].endswith('_l') for v in varnames])
+
+            ldata = gdata[:, vnames]
+            rdata = gdata[:, ~vnames]
+
+            data = np.stack((ldata, rdata), axis = 2)
 
         else: # Individual
 
-            lfilename = f'{path}/{subject}_12hours_left-firsteventsubsample_{dlh}locf/sampled_data.mat'
-            rfilename = f'{path}/{subject}_12hours_right-firsteventsubsample_{dlh}locf/sampled_data.mat'
+            filename = f'{path}/{subject}_12hours_firsteventsubsample_{dlh}locf/sampled_data.mat'
 
-            left_data  = sio.loadmat(lfilename)
-            right_data = sio.loadmat(rfilename)
+            full_data  = sio.loadmat(filename)
 
-            ldata = left_data['tdata']['data'][0,0]
-            rdata = right_data['tdata']['data'][0,0]
+            tdata = full_data['tdata']['data'][0,0]
+            varnames = full_data['tdata']['varname'][0,0].ravel()
+            target = full_data['ttarget'].ravel()
 
-            ltarget = left_data['ttarget'].ravel()
-            rtarget = right_data['ttarget'].ravel()
+            vnames = np.array([v[0].endswith('_l') for v in varnames])
 
-        data = np.stack((ldata, rdata), axis = 2)
-        target = np.stack((ltarget, rtarget), axis = 1)
+            ldata = tdata[:, vnames]
+            rdata = tdata[:, ~vnames]
+
+            data = np.stack((ldata, rdata), axis = 2)
+
+
+        # data = np.stack((ldata, rdata), axis = 2)
+        # target = np.stack((ltarget, rtarget), axis = 1)
 
     else:
 
@@ -196,12 +233,12 @@ def load_data_original_featured(mtype, subject, sensor='both', dlh=0):
             data = temp_data['gdata']['data'][0,0]
             target = temp_data['gtarget'].ravel()
 
-        else:
+        else: # Individual
             filename = f'{path}/{subject}_12hours_{sensor}-firsteventsubsample_{dlh}locf/sampled_data.mat'
             temp_data = sio.loadmat(filename)
 
-            data = temp_data['gdata']['data'][0,0]
-            target = temp_data['gtarget'].ravel()
+            data = temp_data['tdata']['data'][0,0]
+            target = temp_data['ttarget'].ravel()
 
 
         data = np.reshape(data, (data.shape[0], data.shape[1], 1)).shape
@@ -232,6 +269,7 @@ def load_data_left_right(subject, sensor='both', dlh=0, keep_SH=False, keep_even
         else:
             raise ValueError(f"{sensor} is not a valid sensor input.")
 
+        print("The unique target values are: ", target[:5])
         left_df.drop('SH_Event_l', axis = 1, inplace=True)
         right_df.drop('SH_Event_r', axis = 1, inplace = True)
     else:
@@ -383,30 +421,35 @@ def load_general_data_lstm(subject, sensor='both', dlh=0, keep_SH=False, keep_ev
     Description: Load the data for the general case where the subject is the test data
     '''
 
-    all_subjects = ["1-sf", "10-rc"] #, "12-mb", "17-sb", "19-me", "2-bd", "22-ap", "26-tc", "3-jk",
-                    #  "31-ns", "32-rf", "36-af", "38-cs", "39-dg", "4-rs", "41-pk", "43-cm", "7-sb"]
+    all_subjects = ["1-sf", "10-rc", "12-mb", "17-sb", "19-me", "2-bd", "22-ap", "26-tc", "3-jk",
+                      "31-ns", "32-rf", "36-af", "38-cs", "39-dg", "4-rs", "41-pk", "43-cm", "7-sb"]
 
     train_subjects = [s for s in all_subjects if s != subject]
+    print(train_subjects)
 
     train_data = []
     train_target = []
     for tsubject in train_subjects:
 
         temp_train_data, temp_train_target = create_featured_dataset(tsubject, sensor=sensor, dlh=dlh, keep_SH=keep_SH, keep_event=keep_event, smote=smote)
-
+        print(f"The size of the dataset for {tsubject} is {temp_train_data.shape}")
+        print(f"The size of the target for {tsubject} is {temp_train_target.shape}")
         train_data.append(temp_train_data)
         train_target.append(temp_train_target)
 
     train_data   = np.vstack(train_data)
-    train_target = np.vstack(train_target)
+    if not keep_SH:
+        train_target = np.hstack(train_target)
+    else:
+        train_target = np.vstack(train_target)
     holdout_data, holdout_target = create_featured_dataset(subject, sensor=sensor, dlh=dlh, keep_SH=keep_SH, keep_event=keep_event, smote=smote)
 
     return train_data, train_target, holdout_data, holdout_target
 
 def load_general_data_nn(subject, sensor='both', dlh=0, keep_SH=False, return_target=True, smote=None):
 
-    all_subjects = ["1-sf", "10-rc",]# "12-mb", "17-sb", "19-me", "2-bd", "22-ap", "26-tc", "3-jk",
-                    #  "31-ns", "32-rf", "36-af", "38-cs", "39-dg", "4-rs", "41-pk", "43-cm", "7-sb"]
+    all_subjects = ["1-sf", "10-rc", "12-mb", "17-sb", "19-me", "2-bd", "22-ap", "26-tc", "3-jk",
+                     "31-ns", "32-rf", "36-af", "38-cs", "39-dg", "4-rs", "41-pk", "43-cm", "7-sb"]
 
     train_subjects = [s for s in all_subjects if s != subject]
 
@@ -414,14 +457,14 @@ def load_general_data_nn(subject, sensor='both', dlh=0, keep_SH=False, return_ta
     train_target = []
     for tsubject in train_subjects:
 
-        temp_train_data, temp_train_target = load_data_nn(tsubject, sensor=sensor, dlh=dlh, keep_SH=keep_SH, return_target=return_target, smote=smote)
+        temp_train_data, _, temp_train_target = load_data_nn(tsubject, sensor=sensor, dlh=dlh, keep_SH=keep_SH, return_target=return_target, smote=smote)
 
         train_data.append(temp_train_data)
         train_target.append(temp_train_target)
 
     train_data   = np.vstack(train_data)
-    train_target = np.vstack(train_target)
-    holdout_data, holdout_target = load_data_nn(subject, sensor=sensor, dlh=dlh, keep_SH=keep_SH, return_target=return_target, smote=smote)
+    train_target = np.hstack(train_target)
+    holdout_data, _, holdout_target = load_data_nn(subject, sensor=sensor, dlh=dlh, keep_SH=keep_SH, return_target=return_target, smote=smote)
 
     return train_data, train_target, holdout_data, holdout_target
 
