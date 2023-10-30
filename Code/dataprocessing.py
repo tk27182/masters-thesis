@@ -15,18 +15,101 @@ from sklearn.model_selection import train_test_split
 
 pd.options.mode.chained_assignment = None
 
-class DataLoader:
+# class DataLoader:
 
-    def __init__(self, model_type, subject, sensor, dlh, event, binary):
-        self.model_type = model_type
-        self.subject = subject
-        self.sensor = sensor
-        self.dlh = dlh
-        self.event = event
-        self.binary = binary
+#     def __init__(self, model_type: str, subject: str, sensor: str, dlh: int, event: bool, binary: bool, model_name: str, smote: str) -> None:
+#         self.model_type = model_type
+#         self.subject = subject
+#         self.sensor = sensor
+#         self.dlh = dlh
+#         self.event = event
+#         self.binary = binary
+#         self.model_name = model_name
+#         self.smote = smote
 
 
-    #def load_data(self):
+#     def load_data(self):
+
+#         ### Load the dataset for the proper model
+#         if ('lstm' in self.model_name) or ('rnn' in self.model_name):
+#             print("Inside the LSTM or RNN section!")
+#             # Classification
+#             if self.event:
+
+#                 # Individual model
+#                 if self.model_type == 'indv':
+
+#                     data, target = dp.create_featured_dataset(self.subject, sensor=self.sensor, dlh=self.dlh, keep_SH=False, keep_event=self.event, smote=self.smote)
+
+#                 # General model
+#                 elif self.model_type == 'general':
+#                     data, target, hdata, htarget = dp.load_general_data_lstm(self.subject, sensor=self.sensor, dlh=self.dlh, keep_SH=False, keep_event=self.event, smote=self.smote)
+
+#                 else:
+#                     raise ValueError(f"Model type should be indv or general. Not {self.model_type}")
+
+#             # Regression
+#             else:
+#                 # Individual model
+#                 if self.model_type == 'indv':
+#                     data, target = dp.create_featured_dataset(self.subject, sensor=self.sensor, dlh=self.dlh, keep_SH=True, keep_event=self.event, smote=self.smote)
+
+#                 # General model
+#                 elif self.model_type == 'general':
+#                     data, target, hdata, htarget = dp.load_general_data_lstm(self.subject, sensor=self.sensor, dlh=self.dlh, keep_SH=True, keep_event=self.event, smote=self.smote)
+
+#                 else:
+#                     raise ValueError(f"Model type should be indv or general. Not {self.model_type}")
+
+#         # ANN or Classical Machine Learning Algorithm
+#         else:
+#             print("Inside the ANN section!")
+#             # Classification
+#             if self.event:
+
+#                 if self.model_type == 'indv':
+#                     data, varnames, target = dp.load_data_nn(self.subject, sensor=self.sensor, dlh=self.dlh, keep_SH=False, return_target=self.event, smote=self.smote)
+#                     print("Shape of analytical dataset is: ", data.shape)
+#                     print("The target is shaped: ", target.shape)
+
+#                 elif self.model_type == 'general':
+#                     data, target, hdata, htarget = dp.load_general_data_nn(self.subject, sensor=self.sensor, dlh=self.dlh, keep_SH=False, return_target=self.event, smote=self.smote)
+#                     print("Shape of analytical dataset is: ", data.shape)
+#                     print("The target is shaped: ", target.shape)
+
+#                 else:
+#                     raise ValueError(f"Model type should be indv or general. Not {self.model_type}")
+
+#             # Regression
+#             else:
+#                 # Indvidual
+#                 if self.model_type == 'indv':
+#                     data, varnames, target = dp.load_data_nn(self.subject, sensor=self.sensor, dlh=self.dlh, keep_SH=True, return_target=self.event, smote=self.smote)
+#                     print("Shape of analytical dataset is: ", data.shape)
+#                     print("The target is shaped: ", target.shape)
+
+#                 # General
+#                 elif self.model_type == 'general':
+#                     data, target, hdata, htarget = dp.load_general_data_nn(self.subject, sensor=self.sensor, dlh=self.dlh, keep_SH=True, return_target=self.event, smote=None)
+#                     print("Shape of analytical dataset is: ", data.shape)
+#                     print("The target is shaped: ", target.shape)
+
+#                 else:
+#                     raise ValueError(f"Model type should be indv or general. Not {self.model_type}")
+
+
+#         self.data = data
+#         self.target = target
+
+#         if self.model_type == 'general':
+#             self.holdout_data = hdata
+#             self.holdout_target = htarget
+
+
+#     def split_data(self, method: str='time_split'):
+
+#         if method == 'time_split':
+
 
 
 
@@ -137,7 +220,7 @@ def add_gaussian_noise(data, target):
 def augment_pos_labels(data, target):
 
     # Apply some Gaussian noise to each row using SMOTE - oversample the minority class
-    sm = SMOTE(random_state=0, n_neighbor=5)
+    sm = SMOTE(random_state=0, k_neighbors=5)
     data_sampled, target_sampled = sm.fit_resample(data, target)
     return data_sampled, target_sampled
 
