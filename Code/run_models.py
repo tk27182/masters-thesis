@@ -68,6 +68,7 @@ event        = data_name[4] #bool(args[5])
 model_name        = args[3] #args[6]
 binary       = bool(args[4]) #bool(args[7])
 epochs       = re.search('Epochs(\d+)', data_name[6]).group(1)
+print(epochs)
 CALLBACKS    = data_name[7]
 
 if len(data_name) == 8:
@@ -81,7 +82,7 @@ if event == 'classification':
 elif event == 'regression':
     event = False
 else:
-    raise ValueError("Event (data_name[4]) is invalid.")
+    raise ValueError(f"Event {data_name[4]} is invalid.")
 
 # Determine if calssification is binary or not
 if binary:
@@ -96,7 +97,7 @@ if epochs != 'Default':
     MAX_EPOCHS=int(epochs)
 else:
     MAX_EPOCHS=100
-
+print("MAX EPOCHS: ", MAX_EPOCHS)
 # Input bias
 bias = None
 if bias is not None:
@@ -120,11 +121,11 @@ overwrite=False
 ### Create model dictionary
 model_dict = {'lstm':                 nnm.HyperLSTM(loss=loss, num_features=num_features, binary=binary),
               'bilstm':               nnm.HyperBiLSTM(loss=loss, num_features=num_features, binary=binary),
-              'lstm-autoencoder':     nnm.HyperLSTMAutoEncoder(loss=loss, time_steps=TIME_STEPS, num_features=num_features),
+              'lstm-autoencoder':     nnm.HyperLSTMAutoEncoder(time_steps=TIME_STEPS, num_features=num_features),
               'deeplstm-autoencoder': nnm.HyperDeepLSTMAutoEncoder(loss=loss, time_steps=TIME_STEPS, num_features=num_features),
               'ann':                  nnm.HyperANN(loss=loss, num_features=num_features, binary=binary),
               'simplernn':            nnm.HyperSimpleRNN(loss=loss, num_features=num_features, binary=binary),
-              'autoencoder':          nnm.HyperAutoencoder(loss=loss, num_features=num_features, binary=binary),
+              'autoencoder':          nnm.HyperANNAutoencoder(num_input_features=TIME_STEPS),
               'test-ann':             nnm.TestHyperANN(loss=loss, num_features=num_features, binary=binary),
               'test-lstm':            nnm.TestHyperLSTM(loss=loss, num_features=num_features, binary=binary),
               'test-lr':              nnm.TestLR(loss=loss, num_features=num_features, binary=binary,output_bias=input_bias)
@@ -137,7 +138,7 @@ if 'autoencoder' in model_name:
     loss = 'mean_squared_error'
 else:
 
-    if CALLBACKS == 'None':
+    if CALLBACKS == 'EarlyStopping':
         early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss',
                                                         patience=5,
                                                         mode='min')
@@ -149,6 +150,17 @@ best_model_checkpoint = tf.keras.callbacks.ModelCheckpoint(f'../Results/{directo
                                                             monitor='val_loss',
                                                             mode='min'
                                                             )
+
+filename = Path(f"../Results/{directory}/{'_'.join(data_name)}/{model_name}_results/")
+
+# Save model every 100 epochs
+epoch100_checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath=filename / "{epoch}",
+    save_freq = 'epoch',
+    monitor='val_loss',
+    mode='min',
+    save_weights_only=False,
+    period=100)
+
 ### Define the model to use
 mdl = model_dict[model_name]
 print("MODEL NAME: ", model_name)
@@ -373,19 +385,41 @@ if model_type == 'indv':
 elif model_type == 'general':
 
     if smote == "None":
-        train_data = data[train_idx, :]
-        test_data  = data[test_idx, :]
-        val_data   = data[val_idx, :]
 
-        val_data   = np.vstack((val_data, test_data))
-        test_data  = hdata
+        # Don't split the data the same way for the autoencoder
+        if 'autoencoder' not in model_name:
+            train_data = data[train_idx, :]
+            test_data  = data[test_idx, :]
+            val_data   = data[val_idx, :]
 
-        y_train      = target[train_idx]
-        val_target   = target[val_idx]
-        test_target  = target[test_idx]
+            val_data   = np.vstack((val_data, test_data))
+            test_data  = hdata
 
-        y_val    = np.hstack((val_target, test_target))
-        y_test   = htarget
+            y_train      = target[train_idx]
+            val_target   = target[val_idx]
+            test_target  = target[test_idx]
+
+            y_val    = np.hstack((val_target, test_target))
+            y_test   = htarget
+
+        else:
+
+            # Prepare data for the autoencoder model
+            normal, anomalous = dp.process_autoencoder(data[train_idx], hdata, np.vstack((data[val_idx], data[test_idx])),
+                                                    target[train_idx], htarget, np.hstack((target[val_idx], target[test_idx]))
+                                                    )
+
+            normal_train, normal_val, normal_train_target, normal_val_target             = normal
+            anomalous_train, anomalous_val, anomalous_train_target, anomalous_val_target = anomalous
+
+            train_data = normal_train
+            y_train    = normal_train_target
+
+            test_data  = hdata
+            y_test     = htarget
+
+            val_data   = normal_val
+            y_val      = normal_val_target
 
     elif smote == 'original':
 
@@ -501,7 +535,7 @@ if best_model_path.exists() and not overwrite:
 
 else:
     # kt.Hyperband HyperbandTuner
-    tuner = HyperbandTuner(mdl,
+    tuner = kt.Hyperband(mdl,
                         objective=kt.Objective(name='val_loss', direction='min'),
                         max_epochs=MAX_EPOCHS,
                         factor=10,
@@ -512,7 +546,7 @@ else:
 
     # Run the hypertuning search
     tuner.search(train_data, y_train, epochs=MAX_EPOCHS, validation_data = (val_data, y_val), batch_size=BATCH_SIZE,
-                callbacks=[early_stopping, best_model_checkpoint], class_weight=train_weights)
+                callbacks=[early_stopping, best_model_checkpoint, epoch100_checkpoint], class_weight=train_weights)
 
     # Get the optimal hyperparameters
     best_hps=tuner.get_best_hyperparameters(num_trials=1)[0]
@@ -601,6 +635,24 @@ else:
 # Save the predictions
 filename = Path(f"../Results/{directory}/{'_'.join(data_name)}/{model_name}_results/")
 
+# Load saved epoch models
+model100 = tf.keras.models.load_model(filename / '100')
+model200 = tf.keras.models.load_model(filename / '200')
+model500 = tf.keras.models.load_model(filename / '500')
+
+# Make predictions with the checkpointed models
+y_pred_train_100 = model100.predict(train_data)
+y_pred_val_100   = model100.predict(val_data)
+y_pred_test_100  = model100.predict(test_data)
+
+y_pred_train_200 = model200.predict(train_data)
+y_pred_val_200   = model200.predict(val_data)
+y_pred_test_200  = model200.predict(test_data)
+
+y_pred_train_500 = model500.predict(train_data)
+y_pred_val_500   = model500.predict(val_data)
+y_pred_test_500  = model500.predict(test_data)
+
 # Make the directory if it doesn't exist
 filename.mkdir(parents=True, exist_ok=True)
 
@@ -652,12 +704,18 @@ if (filename / "results.npz").exists() and overwrite:
     np.savez(filename / "results.npz", loss=loss, val_loss=val_loss, \
             test_target=y_test, train_target=y_train, val_target=y_val, \
             test_preds=y_pred_test, train_preds=y_pred_train, val_preds=y_pred_val, \
+            test_preds_100=y_pred_test_100, train_preds_100=y_pred_train_100, val_preds_100=y_pred_val_100, \
+            test_preds_200=y_pred_test_200, train_preds_200=y_pred_train_200, val_preds_200=y_pred_val_200, \
+            test_preds_500=y_pred_test_500, train_preds_500=y_pred_train_500, val_preds_500=y_pred_val_500, \
             rez=rez, time=elapsed_time)
-elif not (filename / "resultts.npz").exists():
+elif not (filename / "results.npz").exists():
     print("Results do not exist. Saving Results...")
     np.savez(filename / "results.npz", loss=loss, val_loss=val_loss, \
             test_target=y_test, train_target=y_train, val_target=y_val, \
             test_preds=y_pred_test, train_preds=y_pred_train, val_preds=y_pred_val, \
+            test_preds_100=y_pred_test_100, train_preds_100=y_pred_train_100, val_preds_100=y_pred_val_100, \
+            test_preds_200=y_pred_test_200, train_preds_200=y_pred_train_200, val_preds_200=y_pred_val_200, \
+            test_preds_500=y_pred_test_500, train_preds_500=y_pred_train_500, val_preds_500=y_pred_val_500, \
             rez=rez, time=elapsed_time)
 else:
     print("Results already exist and will not be overwritten.")
