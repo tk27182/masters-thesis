@@ -30,27 +30,29 @@ class CollectResults:
     def load_results(self, data_name, model_name):
 
         subj = data_name.split('_')[1]
-        filename = Path(f"../Results/{subj}_hypertuning_results/{data_name}/{model_name}_results/")
+        filename = f"../Results/{subj}_hypertuning_results/{data_name}"
+        results_folder = f"{model_name}_results"
 
         try:
-            results = np.load(filename / "results.npz")
+            results = np.load(f"{filename}/{results_folder}/results.npz")
 
             # pred_results = np.load(filename / "predictions.npz")
             # targ_results = np.load(filename / "targets.npz")
             # resz_results = np.load(filename / "resource_metrics.npz")
         except FileNotFoundError:
-            results = np.load(filename / '?' / "results.npz")
+            try:
+                results = np.load(filename + "\r/" + results_folder + "/results.npz")
 
-        except FileNotFoundError:
-            results = {'train_preds': np.nan, 'val_preds': np.nan, 'test_preds': np.nan,
-                       'train_preds_100': np.nan, 'val_preds_100': np.nan, 'test_preds_100': np.nan,
-                       'train_preds_200': np.nan, 'val_preds_200': np.nan, 'test_preds_200': np.nan,
-                       'train_preds_500': np.nan, 'val_preds_500': np.nan, 'test_preds_500': np.nan,
-                       'train_preds_max': np.nan, 'val_preds_max': np.nan, 'test_preds_max': np.nan,
+            except FileNotFoundError:
+                results = {'train_preds': np.nan, 'val_preds': np.nan, 'test_preds': np.nan,
+                        'train_preds_100': np.nan, 'val_preds_100': np.nan, 'test_preds_100': np.nan,
+                        'train_preds_200': np.nan, 'val_preds_200': np.nan, 'test_preds_200': np.nan,
+                        'train_preds_500': np.nan, 'val_preds_500': np.nan, 'test_preds_500': np.nan,
+                        'train_preds_max': np.nan, 'val_preds_max': np.nan, 'test_preds_max': np.nan,
 
-                        'train_target': np.nan, 'val_target': np.nan, 'test_target': np.nan,
-                        'rez': np.nan, 'time': np.nan
-                       }
+                            'train_target': np.nan, 'val_target': np.nan, 'test_target': np.nan,
+                            'rez': np.nan, 'time': np.nan
+                        }
 
             # pred_results = {'train_preds': np.nan, 'val_preds': np.nan, 'test_preds': np.nan}
             # targ_results = {'train_target': np.nan, 'val_target': np.nan, 'test_target': np.nan}
@@ -219,21 +221,21 @@ class CollectResults:
         self.results_dict['Val AUC CI p-value Best'].append(val_ci_p)
         self.results_dict['Test AUC CI p-value Best'].append(test_ci_p)
 
-        self.results_dict['Train AU-ROC Best'].append(train_auroc)
-        self.results_dict['Val AU-ROC Best'].append(val_auroc)
-        self.results_dict['Test AU-ROC Best'].append(test_auroc)
+        #self.results_dict['Train AU-ROC Best'].append(train_auroc)
+        #self.results_dict['Val AU-ROC Best'].append(val_auroc)
+        #self.results_dict['Test AU-ROC Best'].append(test_auroc)
 
-        self.results_dict['Train AU-PRC Best'].append(train_auprc)
-        self.results_dict['Val AU-PRC Best'].append(val_auprc)
-        self.results_dict['Test AU-PRC Best'].append(test_auprc)
+        #self.results_dict['Train AU-PRC Best'].append(train_auprc)
+        #self.results_dict['Val AU-PRC Best'].append(val_auprc)
+        #self.results_dict['Test AU-PRC Best'].append(test_auprc)
 
-        self.results_dict['Train AUC CI Best'].append(f"[{train_ci_l:.3f}, {train_ci_u:.3f}]")
-        self.results_dict['Val AUC CI Best'].append(f"[{val_ci_l:.3f}, {val_ci_u:.3f}]")
-        self.results_dict['Test AUC CI Best'].append(f"[{test_ci_l:.3f}, {test_ci_u:.3f}]")
+        #self.results_dict['Train AUC CI Best'].append(f"[{train_ci_l:.3f}, {train_ci_u:.3f}]")
+        #self.results_dict['Val AUC CI Best'].append(f"[{val_ci_l:.3f}, {val_ci_u:.3f}]")
+        #self.results_dict['Test AUC CI Best'].append(f"[{test_ci_l:.3f}, {test_ci_u:.3f}]")
 
-        self.results_dict['Train AUC CI p-value Best'].append(train_ci_p)
-        self.results_dict['Val AUC CI p-value Best'].append(val_ci_p)
-        self.results_dict['Test AUC CI p-value Best'].append(test_ci_p)
+        #self.results_dict['Train AUC CI p-value Best'].append(train_ci_p)
+        #self.results_dict['Val AUC CI p-value Best'].append(val_ci_p)
+        #self.results_dict['Test AUC CI p-value Best'].append(test_ci_p)
         ###########
 
         ### Epoch 100 ###
@@ -395,8 +397,6 @@ class CollectResults:
             # P = np.tile(X, (1, len(Y))) - np.tile(Y.T, (len(X), 1))
             P1 = np.tile(X, (1, Y.shape[0]))
             P2 = np.tile(Y.T, (X.shape[0], 1))
-            print(P1.shape)
-            print(P2.shape)
             P = P1 - P2
 
             idx0 = np.argwhere(P == 0)
@@ -421,7 +421,11 @@ class CollectResults:
             var_y = np.var(V_y, ddof=1)
             var_a = var_x/N + var_y/M
             se_a = np.sqrt(var_a)
-            test_stat = (a - 0.5)/se_a
+            
+            if se_a < 1e-1:
+                test_stat = np.inf
+            else:
+                test_stat = (a - 0.5)/se_a
             p = 1 - norm.cdf(np.abs(test_stat))
             ci_l = np.max([a - 1.96*se_a, 0])
             ci_u = np.min([a + 1.96*se_a, 1])

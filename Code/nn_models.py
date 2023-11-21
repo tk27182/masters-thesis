@@ -33,44 +33,6 @@ from sklearn.metrics import r2_score, auc, roc_curve, roc_auc_score, log_loss, f
 
 ################################################################################################################################
 #### Hyper Classes: To pass arguments to the function models ####
-class HyperANNAutoencoder(kt.HyperModel):
-    def __init__(self, num_input_features):
-        super(HyperANNAutoencoder, self).__init__()
-        self.num_input = num_input_features
-
-    def build(self, hp):
-        hp_units_1 = hp.Int('outer-layer', min_value=32, max_value=64, step=4)
-        hp_units_2 = hp.Int('middle-layer', min_value=12, max_value=28, step=4)
-        hp_units_3 = hp.Int('inner-layer', min_value=4, max_value=8, step=2)
-
-#         self.encoder = tf.keras.Sequential([
-#           tf.keras.layers.Dense(hp_units_1, activation="relu"),
-#           tf.keras.layers.Dense(hp_units_2, activation="relu"),
-#           tf.keras.layers.Dense(hp_units_3, activation="relu")])
-
-#         self.decoder = tf.keras.Sequential([
-#           tf.keras.layers.Dense(hp_units_2, activation="relu"),
-#           tf.keras.layers.Dense(hp_units_1, activation="relu"),
-#           tf.keras.layers.Dense(self.num_input, activation="linear")])
-
-        model = tf.keras.Sequential([
-            # Encoder
-            tf.keras.layers.Dense(hp_units_1, activation="relu"),
-            tf.keras.layers.Dense(hp_units_2, activation="relu"),
-            tf.keras.layers.Dense(hp_units_3, activation="relu"),
-            # Decoder
-            tf.keras.layers.Dense(hp_units_2, activation="relu"),
-            tf.keras.layers.Dense(hp_units_1, activation="relu"),
-            tf.keras.layers.Dense(self.num_input, activation="linear")
-        ])
-
-        # Tune the learning rate
-        hp_learning_rate = hp.Choice('learning_rate', values=[1e-6, 1e-5, 1e-4, 1e-3])
-
-        model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=hp_learning_rate),
-                            loss='mean_squared_error')
-        return model
-
 class TestHyperLSTMRegression(kt.HyperModel):
 
     def __init__(self, loss='mean_squared_error', num_features=2, binary=False):
@@ -229,6 +191,44 @@ class TestHyperANN(kt.HyperModel):
 
         # model.build(input_shape =(2535, 48))
         # print(model.summary())
+        return model
+
+class HyperANNAutoencoder(kt.HyperModel):
+    def __init__(self, num_input_features):
+        super(HyperANNAutoencoder, self).__init__()
+        self.num_input = num_input_features
+
+    def build(self, hp):
+        hp_units_1 = hp.Int('outer-layer', min_value=32, max_value=64, step=4)
+        hp_units_2 = hp.Int('middle-layer', min_value=12, max_value=28, step=4)
+        hp_units_3 = hp.Int('inner-layer', min_value=4, max_value=8, step=2)
+
+#         self.encoder = tf.keras.Sequential([
+#           tf.keras.layers.Dense(hp_units_1, activation="relu"),
+#           tf.keras.layers.Dense(hp_units_2, activation="relu"),
+#           tf.keras.layers.Dense(hp_units_3, activation="relu")])
+
+#         self.decoder = tf.keras.Sequential([
+#           tf.keras.layers.Dense(hp_units_2, activation="relu"),
+#           tf.keras.layers.Dense(hp_units_1, activation="relu"),
+#           tf.keras.layers.Dense(self.num_input, activation="linear")])
+
+        model = tf.keras.Sequential([
+            # Encoder
+            tf.keras.layers.Dense(hp_units_1, activation="relu"),
+            tf.keras.layers.Dense(hp_units_2, activation="relu"),
+            tf.keras.layers.Dense(hp_units_3, activation="relu"),
+            # Decoder
+            tf.keras.layers.Dense(hp_units_2, activation="relu"),
+            tf.keras.layers.Dense(hp_units_1, activation="relu"),
+            tf.keras.layers.Dense(self.num_input, activation="linear")
+        ])
+
+        # Tune the learning rate
+        hp_learning_rate = hp.Choice('learning_rate', values=[1e-6, 1e-5, 1e-4, 1e-3])
+
+        model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=hp_learning_rate),
+                            loss='mean_squared_error')
         return model
 
 class HyperAutoencoder(kt.HyperModel):
@@ -443,6 +443,7 @@ class HyperLSTMAutoEncoder(kt.HyperModel):
                             loss='mean_squared_error')
 
         return model
+
 # class HyperLSTMAutoEncoder(kt.HyperModel):
 
 #     def __init__(self, loss, time_steps, num_features):

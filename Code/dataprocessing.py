@@ -15,101 +15,18 @@ from sklearn.model_selection import train_test_split
 
 pd.options.mode.chained_assignment = None
 
-# class DataLoader:
-
-#     def __init__(self, model_type: str, subject: str, sensor: str, dlh: int, event: bool, binary: bool, model_name: str, smote: str) -> None:
-#         self.model_type = model_type
-#         self.subject = subject
-#         self.sensor = sensor
-#         self.dlh = dlh
-#         self.event = event
-#         self.binary = binary
-#         self.model_name = model_name
-#         self.smote = smote
-
-
-#     def load_data(self):
-
-#         ### Load the dataset for the proper model
-#         if ('lstm' in self.model_name) or ('rnn' in self.model_name):
-#             print("Inside the LSTM or RNN section!")
-#             # Classification
-#             if self.event:
-
-#                 # Individual model
-#                 if self.model_type == 'indv':
-
-#                     data, target = dp.create_featured_dataset(self.subject, sensor=self.sensor, dlh=self.dlh, keep_SH=False, keep_event=self.event, smote=self.smote)
-
-#                 # General model
-#                 elif self.model_type == 'general':
-#                     data, target, hdata, htarget = dp.load_general_data_lstm(self.subject, sensor=self.sensor, dlh=self.dlh, keep_SH=False, keep_event=self.event, smote=self.smote)
-
-#                 else:
-#                     raise ValueError(f"Model type should be indv or general. Not {self.model_type}")
-
-#             # Regression
-#             else:
-#                 # Individual model
-#                 if self.model_type == 'indv':
-#                     data, target = dp.create_featured_dataset(self.subject, sensor=self.sensor, dlh=self.dlh, keep_SH=True, keep_event=self.event, smote=self.smote)
-
-#                 # General model
-#                 elif self.model_type == 'general':
-#                     data, target, hdata, htarget = dp.load_general_data_lstm(self.subject, sensor=self.sensor, dlh=self.dlh, keep_SH=True, keep_event=self.event, smote=self.smote)
-
-#                 else:
-#                     raise ValueError(f"Model type should be indv or general. Not {self.model_type}")
-
-#         # ANN or Classical Machine Learning Algorithm
-#         else:
-#             print("Inside the ANN section!")
-#             # Classification
-#             if self.event:
-
-#                 if self.model_type == 'indv':
-#                     data, varnames, target = dp.load_data_nn(self.subject, sensor=self.sensor, dlh=self.dlh, keep_SH=False, return_target=self.event, smote=self.smote)
-#                     print("Shape of analytical dataset is: ", data.shape)
-#                     print("The target is shaped: ", target.shape)
-
-#                 elif self.model_type == 'general':
-#                     data, target, hdata, htarget = dp.load_general_data_nn(self.subject, sensor=self.sensor, dlh=self.dlh, keep_SH=False, return_target=self.event, smote=self.smote)
-#                     print("Shape of analytical dataset is: ", data.shape)
-#                     print("The target is shaped: ", target.shape)
-
-#                 else:
-#                     raise ValueError(f"Model type should be indv or general. Not {self.model_type}")
-
-#             # Regression
-#             else:
-#                 # Indvidual
-#                 if self.model_type == 'indv':
-#                     data, varnames, target = dp.load_data_nn(self.subject, sensor=self.sensor, dlh=self.dlh, keep_SH=True, return_target=self.event, smote=self.smote)
-#                     print("Shape of analytical dataset is: ", data.shape)
-#                     print("The target is shaped: ", target.shape)
-
-#                 # General
-#                 elif self.model_type == 'general':
-#                     data, target, hdata, htarget = dp.load_general_data_nn(self.subject, sensor=self.sensor, dlh=self.dlh, keep_SH=True, return_target=self.event, smote=None)
-#                     print("Shape of analytical dataset is: ", data.shape)
-#                     print("The target is shaped: ", target.shape)
-
-#                 else:
-#                     raise ValueError(f"Model type should be indv or general. Not {self.model_type}")
-
-
-#         self.data = data
-#         self.target = target
-
-#         if self.model_type == 'general':
-#             self.holdout_data = hdata
-#             self.holdout_target = htarget
-
-
-#     def split_data(self, method: str='time_split'):
-
-#         if method == 'time_split':
-
+#class DataLoader:
+#
+#    def __init__(self, model_type, subject, sensor, dlh, event, binary):
+#        self.model_type = model_type
+#        self.subject = subject
+#        self.sensor = sensor
+#        self.dlh = dlh
+#        self.event = event
+#        self.binary = binary
+#
+#
+#    #def load_data(self):
 
 
 
@@ -220,14 +137,19 @@ def add_gaussian_noise(data, target):
 def augment_pos_labels(data, target):
 
     # Apply some Gaussian noise to each row using SMOTE - oversample the minority class
-    sm = SMOTE(random_state=0, k_neighbors=5)
-    data_sampled, target_sampled = sm.fit_resample(data, target)
+    try:
+        sm = SMOTE(random_state=0, k_neighbors=5) # n_neighbor=5)
+        data_sampled, target_sampled = sm.fit_resample(data, target)
+    except ValueError:
+        sm = SMOTE(random_state=0, k_neighbors=2) # n_neighbor=5)
+        data_sampled, target_sampled = sm.fit_resample(data, target)
+
     return data_sampled, target_sampled
 
 
 def load_data_original_nn(mtype, subject, sensor='both', dlh=0):
 
-    path = '/Users/kirsh012/Box/2019_5_1_data_for_sisi/Data/' #'../Data'
+    path = '/home/sisima/kirsh012/CGMS/Data' #'/Users/kirsh012/Box/2019_5_1_data_for_sisi/Data/' #'../Data'
 
     if dlh == 0:
         dlh = ''
@@ -261,7 +183,7 @@ def load_data_original_nn(mtype, subject, sensor='both', dlh=0):
 
 def load_data_original_featured(mtype, subject, sensor='both', dlh=0):
 
-    path = '/Users/kirsh012/Box/2019_5_1_data_for_sisi/Data/' #'../Data'
+    path = '/home/sisima/kirsh012/CGMS/Data' #'/Users/kirsh012/Box/2019_5_1_data_for_sisi/Data/' #'../Data'
 
     if dlh == 0:
         dlh = ''
@@ -319,21 +241,21 @@ def load_data_original_featured(mtype, subject, sensor='both', dlh=0):
             target = temp_data['gtarget'].ravel()
 
         else: # Individual
-            filename = f'{path}/{subject}_12hours_{sensor}_firsteventsubsample_{dlh}locf/sampled_data.mat'
+            filename = f'{path}/{subject}_12hours_{sensor}-firsteventsubsample_{dlh}locf/sampled_data.mat'
             temp_data = sio.loadmat(filename)
 
             data = temp_data['tdata']['data'][0,0]
             target = temp_data['ttarget'].ravel()
 
 
-        data = np.reshape(data, (data.shape[0], data.shape[1], 1)).shape
+        data = np.reshape(data, (data.shape[0], data.shape[1], 1))
 
     return data, target
 
 def load_data_left_right(subject, sensor='both', dlh=0, keep_SH=False, keep_event=True, smote=None):
 
     # Load the chunked dataset
-    df = pd.read_pickle(f'~/Box/CGMS/{subject}/time_series/chunked_firsteventdata_12_hours_locf.pkl')
+    df = pd.read_pickle(f'/home/sisima/kirsh012/CGMS/Data/{subject}/time_series/chunked_firsteventdata_12_hours_locf.pkl')
 
     # Drop rows with NaN in SH_events
     print("The beginning shape is: ", df.shape)
@@ -410,13 +332,15 @@ def create_featured_dataset(subject, sensor='both', dlh=0, keep_SH=True, keep_ev
 
     keep_left_df, keep_right_df, target = load_data_left_right(subject, sensor=sensor, dlh=dlh, keep_SH=keep_SH, keep_event=keep_event, smote=smote)
 
-    print(keep_left_df.columns)
-    print(keep_right_df.columns)
     if sensor == 'both':
+        print(keep_left_df.columns)
+        print(keep_right_df.columns)
         data = np.stack((keep_left_df.values, keep_right_df.values), axis = 2)
     elif sensor == 'left':
+        print(keep_left_df.columns)
         data = np.reshape(keep_left_df.values, (keep_left_df.shape[0],keep_left_df.shape[1], 1))#np.stack((keep_left_df.values), axis = 2)
     elif sensor == 'right':
+        print(keep_right_df.columns)
         data = np.reshape(keep_right_df.values, (keep_right_df.shape[0],keep_right_df.shape[1], 1))
     else:
         raise ValueError(f"Incorrect sensors specified. {sensor} is not a valid input.")

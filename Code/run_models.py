@@ -113,7 +113,10 @@ print("The type of input_bias is: ", type(input_bias))
 ### Set variables
 TIME_STEPS=24
 BATCH_SIZE=512
-overwrite=False
+if 'autoencoder' in model_name:
+    overwrite=False
+else:
+    overwrite=True
 
 ### Create model dictionary
 model_dict = {'lstm':                 nnm.HyperLSTM(loss=loss, num_features=num_features, binary=binary),
@@ -325,23 +328,24 @@ if model_type == 'indv':
             new_y_val = []
             for f in range(data.shape[2]):
                 tfeature_data, ty_train = dp.augment_pos_labels(data[train_idx, :, f], y_train)
-                vfeature_data, vy_val   = dp.augment_pos_labels(data[val_idx, :, f], y_val)
+                # vfeature_data, vy_val   = dp.augment_pos_labels(data[val_idx, :, f], y_val)
 
                 train_data.append(tfeature_data)
-                val_data.append(vfeature_data)
+                # val_data.append(vfeature_data)
 
                 new_y_train.append(ty_train)
-                new_y_val.append(vy_val)
+                # new_y_val.append(vy_val)
 
             train_data = np.stack(train_data, axis = 2)
-            val_data   = np.stack(val_data, axis = 2)
+            val_data   = data[val_idx]# np.stack(val_data, axis = 2)
 
             y_train = ty_train #np.hstack(new_y_train) #np.stack(new_y_train, axis = 0)
-            y_val   = vy_val #np.hstack(new_y_val) #np.stack(new_y_val, axis = 0)
+            # y_val   = vy_val #np.hstack(new_y_val) #np.stack(new_y_val, axis = 0)
 
         else:
             train_data, y_train = dp.augment_pos_labels(data[train_idx], y_train)
-            val_data, y_val     = dp.augment_pos_labels(data[val_idx], y_val)
+            # val_data, y_val     = dp.augment_pos_labels(data[val_idx], y_val)
+            val_data = data[val_idx]
 
         test_data  = data[test_idx]
 
@@ -536,9 +540,9 @@ if best_model_path.exists() and not overwrite:
 
 else:
     # kt.Hyperband
-    tuner = HyperbandTuner(mdl,
+    tuner = kt.Hyperband(mdl,
                         objective=kt.Objective(name='val_loss', direction='min'),
-                        max_epochs=MAX_EPOCHS,
+                        max_epochs=10,
                         factor=10,
                         seed = 8476823,
                         overwrite=overwrite,
@@ -547,11 +551,11 @@ else:
 
     # Run the hypertuning search
     if 'autoencoder' not in model_name:
-        tuner.search(train_data, y_train, epochs=MAX_EPOCHS, validation_data = (val_data, y_val), batch_size=BATCH_SIZE,
-                    callbacks=[early_stopping, epoch100_checkpoint], class_weight=train_weights)
+        tuner.search(train_data, y_train, epochs=100, validation_data = (val_data, y_val), batch_size=BATCH_SIZE,
+                    callbacks=[early_stopping], class_weight=train_weights)
     elif 'autoencoder' in model_name:
-        tuner.search(train_data, train_data, epochs=MAX_EPOCHS, validation_data = (val_data, val_data), batch_size=BATCH_SIZE,
-                    callbacks=[early_stopping, epoch100_checkpoint])
+        tuner.search(train_data, train_data, epochs=100, validation_data = (val_data, val_data), batch_size=BATCH_SIZE,
+                    callbacks=[early_stopping])
     else:
         raise ValueError(f"Something is wrong with the model name: {model_name}")
 
@@ -569,10 +573,10 @@ else:
 
     if 'autoencoder' not in model_name:
         history = model.fit(train_data, y_train, epochs=MAX_EPOCHS, batch_size=BATCH_SIZE,
-                            validation_data=(val_data, y_val), class_weight=train_weights)
-    elif 'autoencoder' not in model_name:
+                            validation_data=(val_data, y_val), class_weight=train_weights, callbacks=[early_stopping, epoch100_checkpoint])
+    elif 'autoencoder' in model_name:
         history = model.fit(train_data, train_data, epochs=MAX_EPOCHS, batch_size=BATCH_SIZE,
-                            validation_data=(val_data, val_data), class_weight=train_weights)
+                            validation_data=(val_data, val_data), callbacks=[early_stopping, epoch100_checkpoint])
     else:
         raise ValueError(f"Something is wrong with the model name: {model_name}")
 
@@ -738,6 +742,10 @@ elif not (filename / "results.npz").exists():
     np.savez(filename / "results.npz", loss=loss, val_loss=val_loss, \
             test_target=y_test, train_target=y_train, val_target=y_val, \
             test_preds=y_pred_test, train_preds=y_pred_train, val_preds=y_pred_val, \
+            test_preds_100=y_pred_test_100, train_preds_100=y_pred_train_100, val_preds_100=y_pred_val_100, \
+            test_preds_200=y_pred_test_200, train_preds_200=y_pred_train_200, val_preds_200=y_pred_val_200, \
+            test_preds_500=y_pred_test_500, train_preds_500=y_pred_train_500, val_preds_500=y_pred_val_500, \
+            test_preds_max=y_pred_test_max, train_preds_max=y_pred_train_max, val_preds_max=y_pred_val_max, \
             rez=rez, time=elapsed_time)
 else:
     print("Results already exist and will not be overwritten.")
