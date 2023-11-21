@@ -33,6 +33,44 @@ from sklearn.metrics import r2_score, auc, roc_curve, roc_auc_score, log_loss, f
 
 ################################################################################################################################
 #### Hyper Classes: To pass arguments to the function models ####
+class HyperANNAutoencoder(kt.HyperModel):
+    def __init__(self, num_input_features):
+        super(HyperANNAutoencoder, self).__init__()
+        self.num_input = num_input_features
+
+    def build(self, hp):
+        hp_units_1 = hp.Int('outer-layer', min_value=32, max_value=64, step=4)
+        hp_units_2 = hp.Int('middle-layer', min_value=12, max_value=28, step=4)
+        hp_units_3 = hp.Int('inner-layer', min_value=4, max_value=8, step=2)
+
+#         self.encoder = tf.keras.Sequential([
+#           tf.keras.layers.Dense(hp_units_1, activation="relu"),
+#           tf.keras.layers.Dense(hp_units_2, activation="relu"),
+#           tf.keras.layers.Dense(hp_units_3, activation="relu")])
+
+#         self.decoder = tf.keras.Sequential([
+#           tf.keras.layers.Dense(hp_units_2, activation="relu"),
+#           tf.keras.layers.Dense(hp_units_1, activation="relu"),
+#           tf.keras.layers.Dense(self.num_input, activation="linear")])
+
+        model = tf.keras.Sequential([
+            # Encoder
+            tf.keras.layers.Dense(hp_units_1, activation="relu"),
+            tf.keras.layers.Dense(hp_units_2, activation="relu"),
+            tf.keras.layers.Dense(hp_units_3, activation="relu"),
+            # Decoder
+            tf.keras.layers.Dense(hp_units_2, activation="relu"),
+            tf.keras.layers.Dense(hp_units_1, activation="relu"),
+            tf.keras.layers.Dense(self.num_input, activation="linear")
+        ])
+
+        # Tune the learning rate
+        hp_learning_rate = hp.Choice('learning_rate', values=[1e-6, 1e-5, 1e-4, 1e-3])
+
+        model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=hp_learning_rate),
+                            loss='mean_squared_error')
+        return model
+
 class TestHyperLSTMRegression(kt.HyperModel):
 
     def __init__(self, loss='mean_squared_error', num_features=2, binary=False):
@@ -378,35 +416,63 @@ class HyperDeepLSTMAutoEncoder(kt.HyperModel):
         return autoencoder
 
 class HyperLSTMAutoEncoder(kt.HyperModel):
-
-    def __init__(self, loss, time_steps, num_features):
+    def __init__(self, timesteps, num_inputs):
         super(HyperLSTMAutoEncoder, self).__init__()
-        self.loss         = loss
-        self.time_steps   = time_steps
-        self.num_features = num_features
+        self.timesteps  = timesteps
+        self.num_inputs = num_inputs
 
     def build(self, hp):
 
-        lstm_dim = hp.Int("units", min_value = 2, max_value=256, step = 2)
+        hp_units = hp.Int('outer-layer', min_value=28, max_value=64, step=4)
+        model = tf.keras.Sequential([
+            # Encoder
+            tf.keras.layers.LSTM(hp_units, return_sequences = False),
+            # Code layer
+            tf.keras.layers.RepeatVector(self.timesteps),
+            # Decoder
+            tf.keras.layers.LSTM(hp_units, return_sequences = True),
+            # TimeDistributed layer
+            tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(self.num_inputs))
 
-        autoencoder = tf.keras.models.Sequential()
-        #autoencoder.add(tf.keras.Input(shape=(self.time_steps, self.num_features)))
-        autoencoder.add(tf.keras.layers.LSTM(lstm_dim, return_sequences=False,
-                                     name = "encoder"))
-
-        autoencoder.add(tf.keras.layers.RepeatVector(self.time_steps))
-        autoencoder.add(tf.keras.layers.LSTM(self.num_features,
-                                        return_sequences=True, name = 'decoder'))
-        autoencoder.add(tf.keras.layers.TimeDistributed(
-                                tf.keras.layers.Dense(self.num_features, activation = 'sigmoid')))
+        ])
 
         # Tune the learning rate
-        hp_learning_rate = hp.Choice('learning_rate', values=[5e-4, 1e-3, 2e-3, 5e-3, 1e-2])
+        hp_learning_rate = hp.Choice('learning_rate', values=[1e-6, 1e-5, 1e-4, 1e-3])
 
-        autoencoder.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=hp_learning_rate),
-                            loss=self.loss)
+        model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=hp_learning_rate),
+                            loss='mean_squared_error')
 
-        return autoencoder
+        return model
+# class HyperLSTMAutoEncoder(kt.HyperModel):
+
+#     def __init__(self, loss, time_steps, num_features):
+#         super(HyperLSTMAutoEncoder, self).__init__()
+#         self.loss         = loss
+#         self.time_steps   = time_steps
+#         self.num_features = num_features
+
+#     def build(self, hp):
+
+#         lstm_dim = hp.Int("units", min_value = 2, max_value=256, step = 2)
+
+#         autoencoder = tf.keras.models.Sequential()
+#         #autoencoder.add(tf.keras.Input(shape=(self.time_steps, self.num_features)))
+#         autoencoder.add(tf.keras.layers.LSTM(lstm_dim, return_sequences=False,
+#                                      name = "encoder"))
+
+#         autoencoder.add(tf.keras.layers.RepeatVector(self.time_steps))
+#         autoencoder.add(tf.keras.layers.LSTM(self.num_features,
+#                                         return_sequences=True, name = 'decoder'))
+#         autoencoder.add(tf.keras.layers.TimeDistributed(
+#                                 tf.keras.layers.Dense(self.num_features, activation = 'sigmoid')))
+
+#         # Tune the learning rate
+#         hp_learning_rate = hp.Choice('learning_rate', values=[5e-4, 1e-3, 2e-3, 5e-3, 1e-2])
+
+#         autoencoder.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=hp_learning_rate),
+#                             loss=self.loss)
+
+#         return autoencoder
 
 class HyperLSTM(kt.HyperModel):
 

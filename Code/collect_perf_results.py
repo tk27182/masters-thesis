@@ -1,16 +1,18 @@
 import perfmetrics as pm
 
-model_type_set = ['general']
-subjects = ['3-jk'] #, '31-ns', '43-cm']
+model_type_set = ['indv', 'general']
+subjects = ['3-jk', "1-sf", "10-rc", "12-mb", "17-sb", "19-me", "2-bd",
+            "22-ap", "26-tc", "31-ns", "32-rf", "36-af", "38-cs", "39-dg",
+            "4-rs", "41-pk", "43-cm", "7-sb"]
 
-hours=["dlh2"] #"dlh0", "dlh1", "dlh2", "dlh3_", "dlh4_", "dlh5_"]
+hours=["dlh0", "dlh1", 'dlh2'] #"dlh0", "dlh1", "dlh2", "dlh3_", "dlh4_", "dlh5_"]
 
-sensor_set=['left', 'right', 'both']
+sensor_set=['left']
 events=['classification'] #regression
-cl_set=['lstm'] #, 'ann', 'simplernn']
+cl_set=['lstm', 'ann', 'simplernn']
 base_cl_set=['randomforest', 'lr']
-smote_set=["_None"] #, "_downsample", "_original"] #"_smote", "_gauss", "", "_downsample", "_original"]
-epochs = ['Epochs100', 'Epochs500', 'Epochs1000']
+smote_set=["_None", "_downsample", "_smote"] #"_smote", "_gauss", "", "_downsample", "_original"]
+epochs = ['Epochs100', 'Epochs200', 'Epochs500', 'Epochs1000']
 callbacks = ['None']
 
 # Neural Network folders
@@ -33,10 +35,10 @@ for mdl in model_type_set:
             for hour in hours:
                 for event in events:
                     for smote in smote_set:
-                        if smote == '_None':
-                            smote = ''
+                        # if smote == '_None':
+                        #     smote = ''
 
-                        bdata_name = f"{mdl}_{subj}_{sensor}_{hour}_{event}_{smote}"
+                        bdata_name = f"{mdl}_{subj}_{sensor}_{hour}_{event}{smote}"
                         base_data_name_set.append(bdata_name)
 
 # Collect the results
@@ -56,4 +58,4 @@ for base_data_name in base_data_name_set:
 df = cr.make_dataframe()
 
 # Save results to dataframe
-df.to_csv("../Results/3-jk_preliminary_results_dlh2.csv", index=False)
+df.to_csv("../Results/penultimate_results_nn_base.csv", index=False)

@@ -43,24 +43,24 @@ import csv
 
 ########################## Base Model Configurations ##########################
 
-model_types = ['indv', 'general']
+model_types = ['indv']
 subjects    = ['3-jk', "1-sf", "10-rc", "12-mb", "17-sb", "19-me", "2-bd", 
-                "22-ap", "26-tc", "31-ns", "32-rf", "36-af", "38-cs", "39-dg",
-                "4-rs", "41-pk", "43-cm", "7-sb"]
+                "22-ap", "31-ns", "32-rf", "36-af", "38-cs", "39-dg",
+                "4-rs", "41-pk", "43-cm", "7-sb"] # "26-tc", 
 sensors     = ['left']
 hours       = ['dlh0', 'dlh1', 'dlh2']
 events      = ['classification']
-sampling_set= ['_None', '_downsample', '_smote']
-models      = ['randomforest', 'lr']
+sampling_set= ['_smote'] #'_None', '_downsample', 
+models      = ['randomforest', 'lr'] #['autoencoder', 'lstm-autoencoder'] #['lstm', 'ann', 'simplernn'] #
 binary      = ['True']
-epochs      = ['100', '200', '500', '1000']
+epochs      = ['1000']
 callbacks   = ['None']
 
 parameters = product(model_types, subjects, sensors, 
                       hours, events, sampling_set, models, binary, 
                       epochs, callbacks)
 
-with open('final_base_model_configurations.txt', 'w', newline='\n') as fin:
+with open('final_base1000_model_configurations.txt', 'w', newline='\n') as fin:
     
     writer = csv.writer(fin, delimiter='\t')
     

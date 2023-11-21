@@ -1,14 +1,14 @@
 #!/bin/bash
 
 model_type_set=(indv) # general)
-subjects=("3-jk") # "1-sf" "10-rc" "12-mb" "17-sb" "19-me" "2-bd" "22-ap" "26-tc" "3-jk" "31-ns" "32-rf" "36-af" "38-cs" "39-dg" "4-rs" "41-pk" "43-cm" "7-sb"
+subjects=("43-cm") # "1-sf" "10-rc" "12-mb" "17-sb" "19-me" "2-bd" "22-ap" "26-tc" "3-jk" "31-ns" "32-rf" "36-af" "38-cs" "39-dg" "4-rs" "41-pk" "43-cm" "7-sb"
 
 hours=("dlh2") #"dlh0" "dlh1" "dlh2" "dlh3" "dlh4" "dlh5")
 
-sensor_set=(both)
+sensor_set=(left)
 events=(classification) #regression
-cl_set=(test-lstm) # simplernn ann)
-smote_set=("_downsample") #"_downsample") # "_gauss" "")
+cl_set=(autoencoder) # simplernn ann)
+smote_set=("_None") #"_downsample") # "_gauss" "")
 
 for mtype in ${model_type_set[@]}; do
     for subj in ${subjects[@]}; do

@@ -412,7 +412,14 @@ def create_featured_dataset(subject, sensor='both', dlh=0, keep_SH=True, keep_ev
 
     print(keep_left_df.columns)
     print(keep_right_df.columns)
-    data = np.stack((keep_left_df.values, keep_right_df.values), axis = 2)
+    if sensor == 'both':
+        data = np.stack((keep_left_df.values, keep_right_df.values), axis = 2)
+    elif sensor == 'left':
+        data = np.reshape(keep_left_df.values, (keep_left_df.shape[0],keep_left_df.shape[1], 1))#np.stack((keep_left_df.values), axis = 2)
+    elif sensor == 'right':
+        data = np.reshape(keep_right_df.values, (keep_right_df.shape[0],keep_right_df.shape[1], 1))
+    else:
+        raise ValueError(f"Incorrect sensors specified. {sensor} is not a valid input.")
 
     return data, target
 
