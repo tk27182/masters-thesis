@@ -1,3 +1,3 @@
 # masters-thesis
 
-Using high-resolution glucose measurements, I aim to use deep learning models to predict hypoglycemic events in diabetic participants up to 5 hours in advance. 
+Continuous glucose monitoring devices allow people with diabetes to regularly track their glucose levels. Models have been developed using these glucose measurements and used to predict future measurements that are above or below healthy glucose levels. Glucose levels below a certain threshold carry risk for fainting and worse health risks. In this thesis, multiple neural network models are developed, in addition to more traditional machine learning models, and compare across their predictive capabilities, computational resources, and time to train and run. The results show that for some cases, neural networks may be better to use, but in most cases a simpler machine learning model is best, less computationally expensive, and fastest to train.
