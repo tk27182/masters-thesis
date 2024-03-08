@@ -36,7 +36,7 @@ if tf.test.gpu_device_name():
 else:
     print("Please install GPU version of TF")
 
-### Make Hyperband Class update
+### Make Hyperband Class update to not save checkpoints -- BAD
 class HyperbandTuner(kt.Hyperband):
     def __init__(self, hypermodel, **kwargs):
         super().__init__(hypermodel, **kwargs)
@@ -113,10 +113,13 @@ print("The type of input_bias is: ", type(input_bias))
 ### Set variables
 TIME_STEPS=24
 BATCH_SIZE=512
-if 'autoencoder' in model_name:
-    overwrite=False
-else:
-    overwrite=True
+
+tuner_overwrite = True
+rez_overwrite   = True
+# if 'autoencoder' in model_name:
+#     overwrite=False
+# else:
+#     overwrite=True
 
 ### Create model dictionary
 model_dict = {'lstm':                 nnm.HyperLSTM(loss=loss, num_features=num_features, binary=binary),
@@ -532,7 +535,7 @@ dirname.mkdir(parents=True, exist_ok=True)
 
 best_model_path = Path(f"../Results/{directory}/{project_name}/best_model_{model_name}_hypertune")
 
-if best_model_path.exists() and not overwrite:
+if best_model_path.exists() and not tuner_overwrite:
     hypermodel = tf.keras.models.load_model(best_model_path)
     print(hypermodel.summary())
     with open(f"../Results/{directory}/{project_name}/best_hps_{model_name}_hypertune.json", 'r') as bin:
@@ -545,7 +548,7 @@ else:
                         max_epochs=10,
                         factor=10,
                         seed = 8476823,
-                        overwrite=overwrite,
+                        overwrite=tuner_overwrite,
                         directory=directory,
                         project_name=project_name)
 
@@ -623,19 +626,18 @@ print("[test loss, test accuracy]:", eval_result)
 
 # Make predictions
 if 'autoencoder' not in model_name:
-    y_pred_test  = hypermodel.predict(test_data)
     y_pred_train = hypermodel.predict(train_data)
+    y_pred_test  = hypermodel.predict(test_data)
     y_pred_val   = hypermodel.predict(val_data)
 
 else:
 
-    # # Get the original train and val data
-    # train_data = data[train_idx]
-    # val_data   = data[val_idx]
+    # Get the original train and val data
+    train_data = data[train_idx]
+    val_data   = data[val_idx]
 
-    # y_train = data[train_idx] #target[train_idx]
-    # y_val   = data[val_idx] #target[val_idx]
-    # y_test  = test_data
+    y_train = target[train_idx]
+    y_val   = target[val_idx]
 
     # Reconstruct the time series
     y_pred_train = hypermodel.predict(train_data, BATCH_SIZE) #nnm.reconstruct(hypermodel, train_data, threshold=None)
@@ -727,8 +729,19 @@ rez=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024.0/1024.0
 #     print("Resources already exist and will not be overwritten.")
 
 ### Save the results ###
-if (filename / "results.npz").exists() and overwrite:
+print(filename / "results.npz")
+if (filename / "results.npz").exists() and rez_overwrite and not tuner_overwrite:
     print("Overwriting the results...")
+    # Load old results to get the losses
+    old_results = np.load(filename / "results.npz")
+    old_results = dict(old_results)
+
+    loss         = old_results['loss']
+    val_loss     = old_results['val_loss']
+    rez          = old_results['rez']
+    elapsed_time = old_results['time']
+
+    # Save the new predictions
     np.savez(filename / "results.npz", loss=loss, val_loss=val_loss, \
             test_target=y_test, train_target=y_train, val_target=y_val, \
             test_preds=y_pred_test, train_preds=y_pred_train, val_preds=y_pred_val, \
@@ -739,6 +752,17 @@ if (filename / "results.npz").exists() and overwrite:
             rez=rez, time=elapsed_time)
 elif not (filename / "results.npz").exists():
     print("Results do not exist. Saving Results...")
+    np.savez(filename / "results.npz", loss=loss, val_loss=val_loss, \
+            test_target=y_test, train_target=y_train, val_target=y_val, \
+            test_preds=y_pred_test, train_preds=y_pred_train, val_preds=y_pred_val, \
+            test_preds_100=y_pred_test_100, train_preds_100=y_pred_train_100, val_preds_100=y_pred_val_100, \
+            test_preds_200=y_pred_test_200, train_preds_200=y_pred_train_200, val_preds_200=y_pred_val_200, \
+            test_preds_500=y_pred_test_500, train_preds_500=y_pred_train_500, val_preds_500=y_pred_val_500, \
+            test_preds_max=y_pred_test_max, train_preds_max=y_pred_train_max, val_preds_max=y_pred_val_max, \
+            rez=rez, time=elapsed_time)
+
+elif (filename / "results.npz").exists() and rez_overwrite and tuner_overwrite:
+    print("Results exist and the models have been rerun. Overwriting Results...")
     np.savez(filename / "results.npz", loss=loss, val_loss=val_loss, \
             test_target=y_test, train_target=y_train, val_target=y_val, \
             test_preds=y_pred_test, train_preds=y_pred_train, val_preds=y_pred_val, \

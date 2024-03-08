@@ -29,8 +29,6 @@ pd.options.mode.chained_assignment = None
 #    #def load_data(self):
 
 
-
-
 def downsample(train_data, train_target):
 
     # Randomly select zero events 4x the number of positive cases
@@ -135,13 +133,13 @@ def add_gaussian_noise(data, target):
 
 
 def augment_pos_labels(data, target):
-
+    print("No. Pos before SMOTE: ", sum(target==1))
     # Apply some Gaussian noise to each row using SMOTE - oversample the minority class
     try:
         sm = SMOTE(random_state=0, k_neighbors=5) # n_neighbor=5)
         data_sampled, target_sampled = sm.fit_resample(data, target)
     except ValueError:
-        sm = SMOTE(random_state=0, k_neighbors=2) # n_neighbor=5)
+        sm = SMOTE(random_state=0, k_neighbors=1) # n_neighbor=5)
         data_sampled, target_sampled = sm.fit_resample(data, target)
 
     return data_sampled, target_sampled
