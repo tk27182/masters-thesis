@@ -1,13 +1,14 @@
 #!/bin/bash -l
 
 #SBATCH --open-mode=append
-#SBATCH --time=96:00:00
-#SBATCH -p a100-4
-#SBATCH --gres=gpu:a100:1
-#SBATCH --requeue
+#SBATCH --time=24:00:00
+#SBATCH -p k40 #a100-4
+#SBATCH --gres=gpu:k40:2#--gres=gpu:a100:1
+###SBATCH --requeue
 
-#SBATCH --mem=60g
-#SBATCH --array=1-10 #108 #216
+#SBATCH --ntasks=24
+#SBATCH --mem=30g #60g
+#SBATCH --array=11-108 #216
 
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=kirsh012@umn.edu

@@ -1,13 +1,14 @@
 #!/bin/bash -l
 
 ###SBATCH --open-mode=append
+#SBATCH --job-name=NN_MODELS
 #SBATCH --time=24:00:00
 #SBATCH -p k40
 #SBATCH --gres=gpu:k40:2
-#SBATCH --array=487-972: #246-486:3 #10-215 244-486
+#SBATCH --array=92-216 #244-486
 
-###SBATCH --ntasks=24
-###SBATCH --mem=50g
+#SBATCH --ntasks=24
+#SBATCH --mem=30g
 
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=kirsh012@umn.edu
@@ -44,5 +45,5 @@ fi
 
 conda deactivate
 
-sacct -n -X -j $SLURM_JOB_ID -o state%20,jobid%20 | grep FAILED  >> failed_jobs.txt
+sacct -n -X -j $SLURM_JOB_ID -o state%20,jobid%20 | grep FAILED  >> failed_nn_jobs.txt
 

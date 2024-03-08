@@ -1,24 +1,23 @@
 #!/bin/bash -l
 
-#SBATCH --open-mode=append
 #SBATCH --time=24:00:00
 #SBATCH --partition=small
 #SBATCH --ntasks=24
-#SBATCH --mem=16g
-#SBATCH --array=1-459 #55-57,64-66,73-75,82-84,91-93,100-102,109-111,163-165,172-174,181-183,244-246,253-255,262-265,379-381,388-390,397-399
+#SBATCH --mem=10g # 30
+#SBATCH --array=11-51 #2,6,8,15,22,26,28,31,34,51
 
-#SBATCH --mail-type=END,FAIL,REQUEUE,TIME_LIMIT
+#SBATCH --mail-type=ALL
 #SBATCH --mail-user=kirsh012@umn.edu
 
-#SBATCH -e RFLR_models_%A_%a.err
-#SBATCH -o RFLR_models_%A_%a.out
+#SBATCH -e oneclassSVM_%A_%a.err
+#SBATCH -o oneclassSVM_%A_%a.out
 
 cd ~/masters-thesis/Code
 
 module load python3
 source activate tfgpu
 
-config=final_base1000_model_configurations.txt
+config=final_oneclassSVM_model_configurations.txt
 
 modeltype=$(awk -v ArrayTaskID=$SLURM_ARRAY_TASK_ID '$1==ArrayTaskID {print $2}' $config)
 subject=$(awk -v ArrayTaskID=$SLURM_ARRAY_TASK_ID '$1==ArrayTaskID {print $3}' $config)
@@ -36,11 +35,9 @@ directory=${subject}_hypertuning_results
 data_name=${modeltype}_${subject}_${sensor}_${hour}_${event}${smote}_Epochs${epochs}_${callbacks}
 project=hypermodel_${model}_${data_name}
 
-timeout 47.9h python run_base_models.py $directory $project $data_name $model $binary
-if [[ $? == 124 ]]; then
-    scontrol requeue ${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}
-fi
+# Print to a file a message that includes the current $SLURM_ARRAY_TASK_ID, the data name, model, and feature selection method
+echo "This is array task ${SLURM_ARRAY_TASK_ID}, the model is saved in the directory ${directory}, the project folder is ${project}, the data name is ${data_name}, the model name is ${model}, and the fact that the model is doing classification is ${binary}." >> oneclassSVM_run_model_job_tracking.txt
+
+python run_oneclassSVM_models.py $directory $project $data_name $model $binary
 
 conda deactivate
-
-sacct -n -X -j $SLURM_JOB_ID -o state%20,jobid%20 | grep FAILED  >> failed_jobs_base1000.txt
